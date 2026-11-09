@@ -6,5 +6,5 @@ if [[ "$EUID" -ne 0 ]]; then
 fi
 export DEBIAN_FRONTEND=noninteractive
 package_list="$(dirname -- "${BASH_SOURCE[0]}")/build-packages.txt"
-apt-get -o Acquire::Retries=3 update
+apt-get -o Acquire::Retries=3 --error-on=any update
 xargs -r apt-get install -y --no-install-recommends < "$package_list"
