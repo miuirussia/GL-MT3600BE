@@ -48,6 +48,59 @@ class LockValidation(unittest.TestCase):
                     builder.prepare(lock)
 
 
+class ArtifactExport(unittest.TestCase):
+    def setUp(self):
+        self.lock = builder.load_lock()
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.source = self.root / 'openwrt'
+        self.target = self.source / 'bin/targets' / self.lock['target']
+        self.target.mkdir(parents=True)
+        self.artifacts = self.root / 'artifacts'
+        self.artifacts.mkdir()
+        keys = self.root / 'keys'
+        keys.mkdir()
+        (keys / 'public-key.pem').write_text('test public key\n')
+        (self.source / '.config').write_text('CONFIG_TARGET_mediatek=y\n')
+        kernel = self.source / 'build_dir/target-test/linux-mediatek_filogic' / ('linux-' + self.lock['kernel']['version'])
+        kernel.mkdir(parents=True)
+        (kernel / '.vermagic').write_text(self.lock['kernel']['vermagic'] + '\n')
+        (self.root / 'profiles.json').write_text('{}\n')
+        for mocked in (
+            patch.multiple(builder, SOURCE=self.source, WORK=self.root,
+                           ARTIFACTS=self.artifacts, KEYS=keys),
+            patch.object(builder, 'run', return_value=''),
+            patch.object(builder, 'repo_state', return_value={}),
+        ):
+            mocked.start()
+            self.addCleanup(mocked.stop)
+
+    def test_exports_versioned_and_unversioned_images(self):
+        for prefix in ('openwrt', 'openwrt-' + self.lock['release']):
+            with self.subTest(prefix=prefix):
+                image = f'{prefix}-mediatek-filogic-{self.lock["device"]}-squashfs-sysupgrade.bin'
+                (self.target / image).write_bytes(b'test firmware\n')
+                try:
+                    builder.export_artifacts(self.lock)
+                    exported = self.artifacts / self.lock['release']
+                    relative = Path('bin/targets') / self.lock['target'] / image
+                    self.assertEqual((exported / relative).read_bytes(), b'test firmware\n')
+                    digest = hashlib.sha256(b'test firmware\n').hexdigest()
+                    self.assertIn(f'{digest}  {relative}\n', (exported / 'SHA256SUMS').read_text())
+                finally:
+                    (self.target / image).unlink()
+
+    def test_rejects_missing_sysupgrade_image(self):
+        (self.target / f'openwrt-mediatek-filogic-{self.lock["device"]}-initramfs-kernel.bin').touch()
+        (self.target / 'openwrt-mediatek-filogic-other-device-squashfs-sysupgrade.bin').touch()
+        # A directory with the expected filename is not a firmware image.
+        (self.target / f'openwrt-mediatek-filogic-{self.lock["device"]}-squashfs-sysupgrade.bin').mkdir()
+        with self.assertRaisesRegex(RuntimeError, 'sysupgrade image is missing'):
+            builder.export_artifacts(self.lock)
+        self.assertEqual(list(self.artifacts.iterdir()), [])
+
+
 class VermagicRecipe(unittest.TestCase):
     def test_override_and_native_fallback_in_patched_upstream_recipe(self):
         # Exercise the actual patched Make recipe, including make's $ expansion.

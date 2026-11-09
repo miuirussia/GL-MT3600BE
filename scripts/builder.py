@@ -251,8 +251,9 @@ def configure(lock):
 
 def export_artifacts(lock):
     target = SOURCE / 'bin/targets' / lock['target']
-    image = f"openwrt-{lock['release']}-{lock['target'].replace('/', '-')}-{lock['device']}-squashfs-sysupgrade.bin"
-    if not (target / image).is_file():
+    # OpenWrt's filename prefix may omit the release version.
+    images = target.glob(f'*-{lock["device"]}-squashfs-sysupgrade.bin')
+    if not any(image.is_file() for image in images):
         fail('Build succeeded but the expected GL-MT3600BE sysupgrade image is missing.')
     hashes = list((SOURCE / 'build_dir').glob('target-*/linux-mediatek_filogic/linux-*/.vermagic'))
     if len(hashes) != 1:
