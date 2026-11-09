@@ -76,6 +76,10 @@ Use `=y` to include a package in the firmware or `=m` to build a separate APK. P
 
 Patches are applied in filename order. OpenWrt and feed patches must use `a/...` and `b/...` paths relative to the repository root. Kernel patches are appended to the upstream patch series and applied during `target/linux/prepare`.
 
+`110-mt76-mt7996-always-apply-txd.patch` installs the [mt76 issue #1043 workaround](https://github.com/openwrt/mt76/issues/1043#issuecomment-4414905981) into the mt76 package patch series. It makes the mt7996 driver always fill TXWI and set `MT_CT_INFO_APPLY_TXD` to address slow IPv4 NAT downloads over Wi-Fi.
+
+`120-gl-mt3600be-disable-broken-eee.patch` applies the GL-MT3600BE Device Tree workaround from [OpenWrt PR #25996](https://github.com/openwrt/openwrt/pull/25996) for [issue #20967](https://github.com/openwrt/openwrt/issues/20967). It disables 100BASE-TX and 1000BASE-T EEE advertisement on the external RTL8221B PHY to avoid packet loss and slow Ethernet transmission on 25.12. This is a board-specific workaround; the PR has not been merged and hardware validation on GL-MT3600BE is still needed.
+
 After changing local packages, files, scripts, patches, or the lock file:
 
 ```sh

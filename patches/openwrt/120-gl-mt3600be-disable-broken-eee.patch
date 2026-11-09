@@ -1,0 +1,21 @@
+Subject: [PATCH] mediatek: gl-mt3600be: disable broken RTL8221B EEE
+
+Disable 100BASE-TX and 1000BASE-T EEE advertisement on the external
+RTL8221B PHY to work around packet loss and slow Ethernet transmission
+on OpenWrt 25.12. Adapted from the GL-MT3600BE change in PR #25996;
+this is a board-specific workaround, not a PHY driver fix.
+
+Source: https://github.com/openwrt/openwrt/pull/25996
+Issue: https://github.com/openwrt/openwrt/issues/20967
+
+--- a/target/linux/mediatek/dts/mt7987a-glinet-gl-mt3600be.dts
++++ b/target/linux/mediatek/dts/mt7987a-glinet-gl-mt3600be.dts
+@@ -118,6 +118,8 @@
+ 		reset-assert-us = <100000>;
+ 		reset-deassert-us = <100000>;
+ 		reset-gpios = <&pio 42 GPIO_ACTIVE_LOW>;
++		eee-broken-100tx;
++		eee-broken-1000t;
+ 	};
+ 
+ 	phy15: phy@f {
