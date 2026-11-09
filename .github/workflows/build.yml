@@ -48,9 +48,9 @@ jobs:
             /work/downloads
             /work/ccache
           # Cache entries are immutable; save new compiler results after each run.
-          key: openwrt-${{ runner.os }}-${{ hashFiles('openwrt.lock.json', 'scripts/build-packages.txt') }}-${{ hashFiles('configs/**', 'patches/**', 'packages/**', 'files/**', 'uci-defaults/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: openwrt-${{ runner.os }}-${{ hashFiles('openwrt.lock.json', 'scripts/build-packages.txt') }}-${{ hashFiles('configs/**', 'patches/**', 'packages/**', 'apk/**', 'files/**', 'uci-defaults/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            openwrt-${{ runner.os }}-${{ hashFiles('openwrt.lock.json', 'scripts/build-packages.txt') }}-${{ hashFiles('configs/**', 'patches/**', 'packages/**', 'files/**', 'uci-defaults/**') }}-
+            openwrt-${{ runner.os }}-${{ hashFiles('openwrt.lock.json', 'scripts/build-packages.txt') }}-${{ hashFiles('configs/**', 'patches/**', 'packages/**', 'apk/**', 'files/**', 'uci-defaults/**') }}-
             openwrt-${{ runner.os }}-${{ hashFiles('openwrt.lock.json', 'scripts/build-packages.txt') }}-
 
       - name: Restore APK signing key
@@ -74,6 +74,9 @@ jobs:
           ccache --show-config
           ccache --zero-stats
           python3 scripts/builder.py build
+
+      - name: Test prebuilt APK installation
+        run: python3 -m unittest discover -s tests -p test_apk.py
 
       - name: Report compiler cache statistics
         if: ${{ !cancelled() && steps.firmware.outcome != 'skipped' }}

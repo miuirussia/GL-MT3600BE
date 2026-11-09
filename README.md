@@ -98,6 +98,7 @@ Use `=y` to include a package in the firmware or `=m` to build a separate APK. P
 | Directory | Contents |
 | --- | --- |
 | `packages/<name>/` | Local package: `Makefile`, `files/`, `patches/` |
+| `apk/*.apk` | Prebuilt third-party OpenWrt packages included in the firmware |
 | `files/` | Files copied into the firmware root filesystem |
 | `uci-defaults/` | First-boot configuration scripts |
 | `patches/openwrt/*.patch` | Patches to the OpenWrt tree |
@@ -111,7 +112,7 @@ Included network workarounds:
 - `110-mt76-mt7996-always-apply-txd.patch`: always fills TXWI and sets `MT_CT_INFO_APPLY_TXD` in mt7996 to address slow IPv4 NAT downloads over Wi-Fi ([mt76 #1043](https://github.com/openwrt/mt76/issues/1043#issuecomment-4414905981)).
 - `120-gl-mt3600be-disable-broken-eee.patch`: disables 100BASE-TX and 1000BASE-T EEE advertisement on the external RTL8221B PHY to address packet loss and slow Ethernet transmission ([OpenWrt #20967](https://github.com/openwrt/openwrt/issues/20967), [PR #25996](https://github.com/openwrt/openwrt/pull/25996)). Hardware validation on GL-MT3600BE is still needed.
 
-After changing local packages, the `files/` overlay, `uci-defaults/` scripts, patches, or the lock file:
+After changing local packages, prebuilt APKs, the `files/` overlay, `uci-defaults/` scripts, patches, or the lock file:
 
 ```sh
 ./build.sh reset-sources
@@ -119,6 +120,22 @@ After changing local packages, the `files/` overlay, `uci-defaults/` scripts, pa
 ```
 
 Downloads, ccache, signing keys, and exported artifacts are preserved. Save any source edits made inside Docker as patches before resetting.
+
+## Prebuilt APKs
+
+Place OpenWrt `.apk` files in `apk/`. All packages in this directory are included in the firmware without Kconfig entries:
+
+```sh
+cp /path/to/example-1.0-r1.apk apk/
+./build.sh reset-sources
+./build.sh
+```
+
+Packages must match OpenWrt 25.12 and `aarch64_cortex-a53` or `noarch`. Add dependencies to `configs/packages.config` or supply their APKs in the same directory. Missing dependencies fail the build.
+
+Use regular files with simple filenames; subdirectories and symlinks are not supported. The builder re-signs copies with its build key and exports them under `artifacts/25.12.6/apk/`.
+
+Run `reset-sources` after changing files in `apk/`.
 
 ## Third-party feeds
 

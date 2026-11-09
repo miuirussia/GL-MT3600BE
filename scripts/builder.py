@@ -81,7 +81,7 @@ def inventory(*roots):
 
 
 def source_inputs():
-    return inventory('openwrt.lock.json', 'patches', 'packages', 'files', 'uci-defaults')
+    return inventory('openwrt.lock.json', 'patches', 'packages', 'apk', 'files', 'uci-defaults')
 
 
 def checkout(path, url, commit):
@@ -115,6 +115,15 @@ def install_uci_defaults(destination):
         run('/bin/sh', '-n', script)
         shutil.copy2(script, target)
         target.chmod(0o755)
+
+
+def install_apk_packages(destination):
+    for package in input_files('apk'):
+        if (package.parent != INPUT / 'apk' or package.is_symlink() or
+                not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+~\-]*\.apk', package.name)):
+            fail('apk/ must contain regular .apk files directly, without subdirectories, symlinks or special characters in filenames.')
+        destination.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(package, destination / package.name)
 
 
 def repo_state(lock):
@@ -187,6 +196,7 @@ def prepare(lock):
     run('./scripts/feeds', 'update', '-i')
     run('./scripts/feeds', 'install', '-a')
     copy_inputs('packages', SOURCE / 'package/local')
+    install_apk_packages(SOURCE / 'apk')
     copy_inputs('files', SOURCE / 'files')
     install_uci_defaults(SOURCE / 'files/etc/uci-defaults')
     (SOURCE / 'dl').symlink_to(WORK / 'downloads', target_is_directory=True)
@@ -242,6 +252,8 @@ def configure(lock):
                   and not (v == 'n' and not any(l.startswith(k + '=') for l in resolved))]
     if mismatches:
         fail('Kconfig dropped/changed requested options (missing package or dependency?):\n' + '\n'.join(mismatches))
+    if list(input_files('apk')) and 'CONFIG_USE_APK=y' not in resolved:
+        fail('Prebuilt packages in apk/ require CONFIG_USE_APK=y.')
     # Source patches may change kernel selection independently of the lock.
     kernel = run('make', '-s', '--no-print-directory', '-C', 'target/linux',
                  f'TOPDIR={SOURCE}', 'val.LINUX_VERSION', capture=True)
@@ -267,6 +279,8 @@ def export_artifacts(lock):
         shutil.rmtree(temporary)
     # Materialize package symlinks so exports also work on Windows bind mounts.
     shutil.copytree(SOURCE / 'bin', temporary / 'bin', symlinks=False)
+    if (SOURCE / 'apk').is_dir():
+        shutil.copytree(SOURCE / 'apk', temporary / 'apk')
     shutil.copy2(SOURCE / '.config', temporary / 'config.full')
     (temporary / 'config.seed').write_text(run('./scripts/diffconfig.sh', capture=True) + '\n')
     shutil.copy2(INPUT / 'openwrt.lock.json', temporary)
@@ -276,7 +290,7 @@ def export_artifacts(lock):
     (temporary / 'builder-packages.txt').write_text(dpkg + '\n')
     manifest = {
         'lock': lock, 'vermagic': actual, 'repositories': repo_state(lock),
-        'inputs': inventory('openwrt.lock.json', 'configs', 'patches', 'packages', 'files', 'uci-defaults', 'docker', 'scripts', 'compose.yaml', 'build.sh', 'build.ps1', '.gitattributes'),
+        'inputs': inventory('openwrt.lock.json', 'configs', 'patches', 'packages', 'apk', 'files', 'uci-defaults', 'docker', 'scripts', 'compose.yaml', 'build.sh', 'build.ps1', '.gitattributes'),
         'config_sha256': sha((SOURCE / '.config').read_bytes()),
         'public_key_sha256': sha((KEYS / 'public-key.pem').read_bytes()),
         'builder_platform': 'linux/' + {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(os.uname().machine, os.uname().machine),

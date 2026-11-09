@@ -2,3 +2,4 @@
 * text=auto eol=lf
 # First-boot shell scripts may have no extension.
 uci-defaults/** text eol=lf
+*.apk binary

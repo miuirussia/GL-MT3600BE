@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -99,6 +100,26 @@ class ArtifactExport(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'sysupgrade image is missing'):
             builder.export_artifacts(self.lock)
         self.assertEqual(list(self.artifacts.iterdir()), [])
+
+    def test_exports_prebuilt_apks_and_records_original_checksums(self):
+        (self.target / f'openwrt-{self.lock["device"]}-squashfs-sysupgrade.bin').write_bytes(b'firmware')
+        (self.source / 'apk').mkdir()
+        (self.source / 'apk/example.apk').write_bytes(b'signed copy')
+        inputs = self.root / 'inputs'
+        (inputs / 'apk').mkdir(parents=True)
+        (inputs / 'apk/example.apk').write_bytes(b'original package')
+        shutil.copy2(ROOT / 'openwrt.lock.json', inputs)
+
+        with patch.object(builder, 'INPUT', inputs):
+            builder.export_artifacts(self.lock)
+
+        exported = self.artifacts / self.lock['release']
+        self.assertEqual((exported / 'apk/example.apk').read_bytes(), b'signed copy')
+        manifest = json.loads((exported / 'build-manifest.json').read_text())
+        self.assertEqual(manifest['inputs']['apk/example.apk']['sha256'],
+                         hashlib.sha256(b'original package').hexdigest())
+        self.assertIn(hashlib.sha256(b'signed copy').hexdigest() + '  apk/example.apk\n',
+                      (exported / 'SHA256SUMS').read_text())
 
     def test_package_symlinks_are_exported_as_regular_files(self):
         (self.target / f'openwrt-{self.lock["device"]}-squashfs-sysupgrade.bin').write_bytes(b'firmware')

@@ -1,0 +1,29 @@
+From: Router firmware builder
+Subject: [PATCH] package: include local prebuilt APKs in the root filesystem
+
+Files in apk/ are explicitly trusted build inputs. Sign the staged copies
+with the build key so the normal rootfs installation still verifies packages.
+Install before prepare_rootfs so post-install scripts and init services use
+the same handling as packages compiled from source.
+
+--- a/package/Makefile
++++ b/package/Makefile
+@@ -99,10 +99,18 @@
+ ifneq ($(CONFIG_USE_APK),)
+ 	$(file >$(TMP_DIR)/apk_install_list,\
+ 	    $(foreach pkg,$(shell cat $(PACKAGE_INSTALL_FILES) 2>/dev/null),$(pkg)$(call GetABISuffix,$(pkg))))
++ifneq ($(wildcard $(TOPDIR)/apk/*.apk),)
++	set -e; for package in $(wildcard $(TOPDIR)/apk/*.apk); do \
++		$(STAGING_DIR_HOST)/bin/apk adbsign --allow-untrusted \
++			--reset-signatures --sign $(BUILD_KEY_APK_SEC) "$$package"; \
++	done
++	$(STAGING_DIR_HOST)/bin/apk verify --keys-dir $(TOPDIR) $(wildcard $(TOPDIR)/apk/*.apk)
++endif
+ 	$(call apk,$(TARGET_DIR)) add --no-cache --initdb --no-scripts --arch $(ARCH_PACKAGES) \
+ 		--repositories-file /dev/null --repository file://$(PACKAGE_DIR_ALL)/packages.adb \
+ 		$(if $(CONFIG_SIGNED_PACKAGES),,--allow-untrusted) \
+ 		$$(cat $(TMP_DIR)/apk_install_list) \
++		$(wildcard $(TOPDIR)/apk/*.apk) \
+ 			"base-files=$(shell cat $(STAGING_DIR)/base-files.version)" \
+ 			"libc=$(shell cat $(STAGING_DIR)/libc.version)" \
+ 			"kernel=$(shell cat $(STAGING_DIR)/kernel.version)"
