@@ -6,5 +6,6 @@ RUN bash /opt/routerfw/install-deps.sh \
     && groupmod -n builder ubuntu \
     && usermod -l builder -d /home/builder -m -s /bin/bash ubuntu
 COPY docker/entrypoint.sh /usr/local/bin/routerfw-entrypoint
+RUN chmod 0755 /usr/local/bin/routerfw-entrypoint
 ENTRYPOINT ["/usr/local/bin/routerfw-entrypoint"]
 CMD ["build"]

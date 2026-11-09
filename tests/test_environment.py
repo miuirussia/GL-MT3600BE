@@ -100,6 +100,26 @@ class ArtifactExport(unittest.TestCase):
             builder.export_artifacts(self.lock)
         self.assertEqual(list(self.artifacts.iterdir()), [])
 
+    def test_package_symlinks_are_exported_as_regular_files(self):
+        (self.target / f'openwrt-{self.lock["device"]}-squashfs-sysupgrade.bin').write_bytes(b'firmware')
+        packages = self.target / 'packages'
+        packages.mkdir()
+        (packages / 'example.apk').write_bytes(b'package')
+        shared = self.source / 'bin/packages/test'
+        shared.mkdir(parents=True)
+        (shared / 'base').symlink_to(packages, target_is_directory=True)
+        (packages / 'alias.apk').symlink_to('example.apk')
+
+        builder.export_artifacts(self.lock)
+
+        exported = self.artifacts / self.lock['release']
+        for name in ('example.apk', 'alias.apk'):
+            package = exported / 'bin/packages/test/base' / name
+            self.assertEqual(package.read_bytes(), b'package')
+            self.assertFalse(package.is_symlink())
+        self.assertFalse((exported / 'bin/packages/test/base').is_symlink())
+        self.assertIn('bin/packages/test/base/alias.apk', (exported / 'SHA256SUMS').read_text())
+
 
 class VermagicRecipe(unittest.TestCase):
     def test_override_and_native_fallback_in_patched_upstream_recipe(self):

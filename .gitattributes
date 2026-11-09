@@ -1,0 +1,4 @@
+# Keep Linux build inputs usable in Git for Windows checkouts (core.autocrlf=true).
+* text=auto eol=lf
+# First-boot shell scripts may have no extension.
+uci-defaults/** text eol=lf

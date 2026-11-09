@@ -4,33 +4,47 @@ Build [OpenWrt 25.12.6](https://downloads.openwrt.org/releases/25.12.6/targets/m
 
 ## Build
 
-Requires Docker with Compose. Allow 4 CPUs, 8 GiB RAM, and 40 GiB disk space.
+Requires Docker with Compose. Builds default to four parallel jobs (`JOBS=4`); CPU, RAM, and disk needs depend on the selected packages. The launchers support Linux, macOS, and Windows; builds run in a Linux container.
 
-With rootless Docker (including Lima), shared host mounts may reject ownership changes. In that case, outputs and signing keys are staged in the Linux work volume and copied back to `artifacts/` and `.keys/` when the command exits, including after a build failure.
+### Linux and macOS
 
 ```sh
 ./build.sh                       # Build the Docker image and firmware
 JOBS=8 ./build.sh                # Default: JOBS=4
 ```
 
-Output goes to `artifacts/25.12.6/`. The firmware image is:
+### Windows
 
-```text
-bin/targets/mediatek/filogic/openwrt-25.12.6-mediatek-filogic-glinet_gl-mt3600be-squashfs-sysupgrade.bin
+Install [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) with the WSL 2 backend and start it in Linux containers mode. Run from the project directory in Windows PowerShell 5.1 or PowerShell 7:
+
+```powershell
+.\build.ps1                       # Build the Docker image and firmware
+$env:JOBS = '8'; .\build.ps1       # Default: JOBS=4
 ```
 
-The output also includes APK packages, configuration, the lock file, a build manifest, and SHA256SUMS. Each successful build replaces the previous output directory.
+If PowerShell blocks local scripts, allow them for the current session:
 
-```sh
-./build.sh image                 # Build only the Docker image
-./build.sh prepare               # Check out sources and feeds; apply patches
-./build.sh configure             # Run and validate defconfig
-./build.sh download              # Download package sources
-./build.sh menuconfig            # Configure packages interactively
-./build.sh shell                 # Open Bash in /work/openwrt
-./build.sh make -j1 package/htop/compile V=s
-./build.sh reset-sources         # Remove the source tree and compiled files
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\build.ps1
 ```
+
+Git attributes keep build inputs at LF. Save new shell scripts, patches, and package recipes with LF endings. For an older checkout with CRLF inputs, use a fresh clone and preserve your local edits. In a WSL Linux checkout, use `./build.sh`.
+
+### Commands
+
+Pass these commands to `./build.sh` or `.\build.ps1`:
+
+| Command | Action |
+| --- | --- |
+| `image` | Build only the Docker image |
+| `prepare` | Check out sources and feeds; apply patches |
+| `configure` | Run and validate defconfig |
+| `download` | Download package sources |
+| `menuconfig` | Configure packages interactively |
+| `shell` | Open Bash in `/work/openwrt` |
+| `make -j1 package/htop/compile V=s` | Build a single package |
+| `reset-sources` | Remove the source tree and compiled files |
 
 After `menuconfig`, save your selection on the host:
 
@@ -38,9 +52,23 @@ After `menuconfig`, save your selection on the host:
 cp artifacts/menuconfig.config configs/custom.config
 ```
 
+In PowerShell, use `Copy-Item artifacts/menuconfig.config configs/custom.config`.
+
+### Output and storage
+
+Output goes to `artifacts/25.12.6/`. The firmware image is:
+
+```text
+bin/targets/mediatek/filogic/openwrt-25.12.6-mediatek-filogic-glinet_gl-mt3600be-squashfs-sysupgrade.bin
+```
+
+The output also includes APK packages, configuration, the lock file, a build manifest, and `SHA256SUMS`. Each successful build replaces the previous output directory. Package symlinks are exported as regular files or directories, so Windows symlink privileges are not required.
+
+Sources, downloads, and ccache stay in the Linux volume `routerfw_work`; signing keys are stored in `.keys/`. With rootless Docker (including Lima), outputs and keys may be staged in the work volume and copied to the host when the command exits, including after a build failure.
+
 ## GitHub Actions
 
-`.github/workflows/build.yml` builds directly on Ubuntu 24.04 without Docker. Run it manually through Actions or push a `v*` tag:
+[build.yml](.github/workflows/build.yml) builds directly on Ubuntu 24.04 without Docker. Run it manually through Actions or push a `v*` tag:
 
 ```sh
 git tag v0.1.0-rc1
@@ -51,7 +79,7 @@ A successful build creates a **prerelease** containing firmware images, a full b
 
 To reuse the APK signing key across runs, set the `APK_PRIVATE_KEY` repository secret to the contents of `.keys/private-key.pem`. Without this secret, each CI build generates a new key.
 
-Docker and Actions use the same `scripts/builder.py`, lock file, and configuration. Both install dependencies through `scripts/install-deps.sh` using `scripts/build-packages.txt`. Actions caches downloads and ccache. Ubuntu system package versions may change; the installed versions are recorded in `builder-packages.txt`.
+Docker and Actions use the same builder, lock file, configuration, and dependency list in `scripts/build-packages.txt`. Actions caches downloads and ccache; installed system package versions are recorded in `builder-packages.txt`.
 
 ## Packages and configuration
 
@@ -76,11 +104,12 @@ Use `=y` to include a package in the firmware or `=m` to build a separate APK. P
 
 Patches are applied in filename order. OpenWrt and feed patches must use `a/...` and `b/...` paths relative to the repository root. Kernel patches are appended to the upstream patch series and applied during `target/linux/prepare`.
 
-`110-mt76-mt7996-always-apply-txd.patch` installs the [mt76 issue #1043 workaround](https://github.com/openwrt/mt76/issues/1043#issuecomment-4414905981) into the mt76 package patch series. It makes the mt7996 driver always fill TXWI and set `MT_CT_INFO_APPLY_TXD` to address slow IPv4 NAT downloads over Wi-Fi.
+Included network workarounds:
 
-`120-gl-mt3600be-disable-broken-eee.patch` applies the GL-MT3600BE Device Tree workaround from [OpenWrt PR #25996](https://github.com/openwrt/openwrt/pull/25996) for [issue #20967](https://github.com/openwrt/openwrt/issues/20967). It disables 100BASE-TX and 1000BASE-T EEE advertisement on the external RTL8221B PHY to avoid packet loss and slow Ethernet transmission on 25.12. This is a board-specific workaround; the PR has not been merged and hardware validation on GL-MT3600BE is still needed.
+- `110-mt76-mt7996-always-apply-txd.patch`: always fills TXWI and sets `MT_CT_INFO_APPLY_TXD` in mt7996 to address slow IPv4 NAT downloads over Wi-Fi ([mt76 #1043](https://github.com/openwrt/mt76/issues/1043#issuecomment-4414905981)).
+- `120-gl-mt3600be-disable-broken-eee.patch`: disables 100BASE-TX and 1000BASE-T EEE advertisement on the external RTL8221B PHY to address packet loss and slow Ethernet transmission ([OpenWrt #20967](https://github.com/openwrt/openwrt/issues/20967), [PR #25996](https://github.com/openwrt/openwrt/pull/25996)). Hardware validation on GL-MT3600BE is still needed.
 
-After changing local packages, files, scripts, patches, or the lock file:
+After changing local packages, the `files/` overlay, `uci-defaults/` scripts, patches, or the lock file:
 
 ```sh
 ./build.sh reset-sources
@@ -101,9 +130,7 @@ Add a repository to the `feeds` array in `openwrt.lock.json`:
 }
 ```
 
-Replace the URL and SHA with actual values. Use feeds compatible with OpenWrt 25.12 and its apk package manager. Select their packages in `configs/packages.config`.
-
-Pin `PKG_SOURCE_VERSION` and source archive hashes in local recipes. The lock file requires full commit SHAs rather than branch names.
+Replace the URL and SHA with actual values; the lock file requires full commit SHAs. Use feeds compatible with OpenWrt 25.12 and its APK package manager, then select packages in `configs/packages.config`. Pin `PKG_SOURCE_VERSION` and source archive hashes in local recipes.
 
 ## uci-defaults
 
@@ -111,14 +138,13 @@ Create a script such as `uci-defaults/99-local-settings`:
 
 ```sh
 #!/bin/sh
-uci set system.@system[0].hostname='Beryl7'
-uci commit system
-exit 0
+uci set system.@system[0].hostname='Beryl7' &&
+    uci commit system
 ```
 
 The builder checks it with `sh -n` and installs it in `/etc/uci-defaults/` with mode `0755`. A matching filename in `files/etc/uci-defaults/` causes an error. Keep regular files directly in this directory, without subdirectories or symlinks.
 
-OpenWrt removes each script after it succeeds. Failed scripts may run again, so make them safe to repeat and return `exit 0` only after successful configuration.
+OpenWrt removes each script after it succeeds. Failed scripts may run again, so make them safe to repeat and ensure they return a zero status only after successful configuration.
 
 ## Vermagic
 
@@ -130,13 +156,23 @@ To restore the original hash calculation, set `kernel.vermagic_mode` to `"native
 
 ## Reproducibility
 
-The OpenWrt commit, feed commits, release metadata, source epoch, Debian image digest, and apt snapshot are pinned. Docker uses `linux/amd64`, emulated on Apple Silicon. Sources and caches reside in the Linux volume `routerfw_work`.
+The OpenWrt commit, feed commits, release metadata checksum, and source epoch are pinned. Docker uses `ubuntu:24.04` without an image digest; apt repositories and dependency versions are not pinned. Actions also installs dependencies from Ubuntu repositories. Both build environments can therefore change over time; exported `builder-packages.txt` records the installed package versions but does not pin them. Docker uses `linux/amd64`, emulated on Apple Silicon.
 
 The APK signing key is generated in `.keys/` and reused across builds. Transfer it separately when reproducing a build on another machine; never publish `private-key.pem`. Only the public key is exported. Bit-for-bit equality between two full builds has not been verified.
 
-Environment checks:
+## Checks
 
 ```sh
 ./build.sh configure
 docker compose run --rm --entrypoint python3 builder -m unittest discover -s /inputs/tests
 ```
+
+On Windows, use `.\build.ps1 configure`, then the same `docker compose run` command.
+
+Test the PowerShell launcher without a Docker daemon:
+
+```powershell
+.\tests\test_build_windows.ps1
+```
+
+[test-windows.yml](.github/workflows/test-windows.yml) runs launcher checks in Windows PowerShell 5.1 and PowerShell 7.

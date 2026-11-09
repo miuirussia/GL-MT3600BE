@@ -265,7 +265,8 @@ def export_artifacts(lock):
     temporary = ARTIFACTS / ('.' + lock['release'] + '.tmp')
     if temporary.exists():
         shutil.rmtree(temporary)
-    shutil.copytree(SOURCE / 'bin', temporary / 'bin', symlinks=True)
+    # Materialize package symlinks so exports also work on Windows bind mounts.
+    shutil.copytree(SOURCE / 'bin', temporary / 'bin', symlinks=False)
     shutil.copy2(SOURCE / '.config', temporary / 'config.full')
     (temporary / 'config.seed').write_text(run('./scripts/diffconfig.sh', capture=True) + '\n')
     shutil.copy2(INPUT / 'openwrt.lock.json', temporary)
@@ -275,7 +276,7 @@ def export_artifacts(lock):
     (temporary / 'builder-packages.txt').write_text(dpkg + '\n')
     manifest = {
         'lock': lock, 'vermagic': actual, 'repositories': repo_state(lock),
-        'inputs': inventory('openwrt.lock.json', 'configs', 'patches', 'packages', 'files', 'uci-defaults', 'docker', 'scripts', 'compose.yaml', 'build.sh'),
+        'inputs': inventory('openwrt.lock.json', 'configs', 'patches', 'packages', 'files', 'uci-defaults', 'docker', 'scripts', 'compose.yaml', 'build.sh', 'build.ps1', '.gitattributes'),
         'config_sha256': sha((SOURCE / '.config').read_bytes()),
         'public_key_sha256': sha((KEYS / 'public-key.pem').read_bytes()),
         'builder_platform': 'linux/' + {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(os.uname().machine, os.uname().machine),

@@ -3,7 +3,7 @@ set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
 if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; then
-    echo 'Docker with Compose is required (Docker Desktop on macOS).' >&2
+    echo 'Docker with Compose is required (Docker Desktop on macOS/Windows; use build.ps1 in PowerShell).' >&2
     exit 1
 fi
 export BUILD_UID="$(id -u)" BUILD_GID="$(id -g)"
