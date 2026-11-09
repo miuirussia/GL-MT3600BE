@@ -6,6 +6,8 @@ Build [OpenWrt 25.12.6](https://downloads.openwrt.org/releases/25.12.6/targets/m
 
 Requires Docker with Compose. Allow 4 CPUs, 8 GiB RAM, and 40 GiB disk space.
 
+With rootless Docker (including Lima), shared host mounts may reject ownership changes. In that case, outputs and signing keys are staged in the Linux work volume and copied back to `artifacts/` and `.keys/` when the command exits, including after a build failure.
+
 ```sh
 ./build.sh                       # Build the Docker image and firmware
 JOBS=8 ./build.sh                # Default: JOBS=4
