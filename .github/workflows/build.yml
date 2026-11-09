@@ -132,7 +132,7 @@ jobs:
 
       - name: Publish prerelease
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || format('ci-{0}-{1}', github.run_number, github.run_attempt) }}
           RELEASE_COMMIT: ${{ github.sha }}
