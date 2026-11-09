@@ -21,6 +21,9 @@ jobs:
       ROUTERFW_WORK_DIR: /work
       ROUTERFW_ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
       ROUTERFW_KEYS_DIR: /work/keys
+      CCACHE_DIR: /work/ccache
+      # The toolchain is rebuilt on each runner, so compiler mtimes change.
+      CCACHE_COMPILERCHECK: content
       JOBS: '2'
       TZ: UTC
       LANG: C.UTF-8
@@ -37,13 +40,17 @@ jobs:
           sudo bash scripts/install-deps.sh
           df -h /work
 
-      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      - name: Restore downloads and compiler cache
+        id: cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
             /work/downloads
             /work/ccache
-          key: openwrt-${{ runner.os }}-${{ hashFiles('openwrt.lock.json', 'scripts/build-packages.txt') }}-${{ hashFiles('configs/**', 'patches/**', 'packages/**', 'files/**', 'uci-defaults/**') }}
+          # Cache entries are immutable; save new compiler results after each run.
+          key: openwrt-${{ runner.os }}-${{ hashFiles('openwrt.lock.json', 'scripts/build-packages.txt') }}-${{ hashFiles('configs/**', 'patches/**', 'packages/**', 'files/**', 'uci-defaults/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
+            openwrt-${{ runner.os }}-${{ hashFiles('openwrt.lock.json', 'scripts/build-packages.txt') }}-${{ hashFiles('configs/**', 'patches/**', 'packages/**', 'files/**', 'uci-defaults/**') }}-
             openwrt-${{ runner.os }}-${{ hashFiles('openwrt.lock.json', 'scripts/build-packages.txt') }}-
 
       - name: Restore APK signing key
@@ -62,7 +69,37 @@ jobs:
           python3 -m unittest discover -s tests
 
       - name: Build firmware
-        run: python3 scripts/builder.py build
+        id: firmware
+        run: |
+          ccache --show-config
+          ccache --zero-stats
+          python3 scripts/builder.py build
+
+      - name: Report compiler cache statistics
+        if: ${{ !cancelled() && steps.firmware.outcome != 'skipped' }}
+        env:
+          RESTORED_CACHE_KEY: ${{ steps.cache.outputs.cache-matched-key }}
+        run: |
+          ccache_bin=/work/openwrt/staging_dir/host/bin/ccache
+          if [ ! -x "$ccache_bin" ]; then
+            ccache_bin=ccache
+          fi
+          {
+            echo '### Compiler cache'
+            printf 'Restored cache: %s\n\n' "${RESTORED_CACHE_KEY:-none}"
+            echo '```text'
+            "$ccache_bin" --show-stats --verbose
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Save downloads and compiler cache
+        if: ${{ !cancelled() && steps.firmware.outcome != 'skipped' }}
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            /work/downloads
+            /work/ccache
+          key: ${{ steps.cache.outputs.cache-primary-key }}
 
       - name: Package release assets
         run: python3 scripts/release-assets.py

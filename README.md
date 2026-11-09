@@ -81,6 +81,8 @@ To reuse the APK signing key across runs, set the `APK_PRIVATE_KEY` repository s
 
 Docker and Actions use the same builder, lock file, configuration, and dependency list in `scripts/build-packages.txt`. Actions caches downloads and ccache; installed system package versions are recorded in `builder-packages.txt`.
 
+Actions restores the latest cache for the same inputs, falling back to one with the same lock file and dependency list, then saves a new snapshot after each build attempt, including failed builds. Cancelled runs do not save a cache. Compiler identity is checked by content so rebuilding the toolchain does not invalidate ccache solely because compiler timestamps changed. The first build with this setting warms the compiler cache; later builds can reuse it. The job summary reports cache hits and misses for the current build. Sources, `build_dir`, and `staging_dir` are not cached, so tools and toolchain builds, configuration, and linking still take time.
+
 ## Packages and configuration
 
 Add package selections to `configs/packages.config`:
