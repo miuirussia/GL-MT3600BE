@@ -1,0 +1,26 @@
+name: routerfw
+services:
+  builder:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    hostname: openwrt-builder
+    init: true
+    environment:
+      BUILD_UID: ${BUILD_UID:-1000}
+      BUILD_GID: ${BUILD_GID:-1000}
+      JOBS: ${JOBS:-4}
+      TZ: UTC
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      CCACHE_DIR: /work/ccache
+    volumes:
+      - work:/work
+      - .:/inputs:ro
+      - ./artifacts:/artifacts
+      - ./.keys:/keys
+    working_dir: /work/openwrt
+    stop_grace_period: 30s
+volumes:
+  work:

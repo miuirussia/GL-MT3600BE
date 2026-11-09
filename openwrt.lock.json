@@ -1,0 +1,25 @@
+{
+  "release": "25.12.6",
+  "repository": "https://github.com/openwrt/openwrt.git",
+  "commit": "64900e756efa667774214f9c6b17c113222e01f7",
+  "revision": "r33311-981c978eff",
+  "source_date_epoch": 1792273538,
+  "target": "mediatek/filogic",
+  "device": "glinet_gl-mt3600be",
+  "kernel": {
+    "version": "6.12.112",
+    "vermagic_mode": "official",
+    "vermagic": "f0a7348f9cb959e1bf4d0447669b031e"
+  },
+  "reference": {
+    "url": "https://downloads.openwrt.org/releases/25.12.6/targets/mediatek/filogic/profiles.json",
+    "sha256": "7777650dad424408da530c4702fd23e53fee8c24f5d95dbd2e1ba0d443b88724"
+  },
+  "feeds": [
+    {"name": "packages", "url": "https://git.openwrt.org/feed/packages.git", "commit": "093d551675b1119a06ef224d419905e8d6b2af1a"},
+    {"name": "luci", "url": "https://git.openwrt.org/project/luci.git", "commit": "75a306df84a020c57a631ef5b4c02ace56d93387"},
+    {"name": "routing", "url": "https://git.openwrt.org/feed/routing.git", "commit": "48c808034414a2112cf9d5261a20a320e8d0d170"},
+    {"name": "telephony", "url": "https://git.openwrt.org/feed/telephony.git", "commit": "2618106d5846a4a542fdf5809f0d3ed228ce439b"},
+    {"name": "video", "url": "https://github.com/openwrt/video.git", "commit": "094bf58da6682f895255a35a84349a79dab4bf95"}
+  ]
+}

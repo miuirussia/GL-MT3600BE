@@ -1,0 +1,7 @@
+*
+!docker/
+!docker/Dockerfile
+!docker/entrypoint.sh
+!scripts/
+!scripts/install-deps.sh
+!scripts/build-packages.txt
