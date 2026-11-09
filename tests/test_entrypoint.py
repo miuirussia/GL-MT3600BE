@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -73,6 +74,9 @@ class EntrypointPermissions(unittest.TestCase):
                        ACCESS_FIXED=str(root / 'access-fixed'),
                        DENIED_EXPORT=denied_export, LOCK_STATUS=str(lock_status),
                        EXPECT_STDIN=str(int(stdin is not None)))
+            # Test container paths independently of the host's native build paths.
+            env.pop('ROUTERFW_ARTIFACTS_DIR', None)
+            env.pop('ROUTERFW_KEYS_DIR', None)
             # Keep the entrypoint's lock file inside the temporary test tree.
             entrypoint = root / 'entrypoint.sh'
             entrypoint.write_text((ROOT / 'docker/entrypoint.sh').read_text().replace(
@@ -83,12 +87,16 @@ class EntrypointPermissions(unittest.TestCase):
             return result, log.read_text().splitlines()
 
     def test_writable_bind_mounts_do_not_require_chown(self):
-        result, commands = self.run_entrypoint()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(commands, [
-            '1234:5678 /work /work/openwrt /work/downloads /work/ccache /home/builder',
-            'python3 /inputs/scripts/builder.py make -j1',
-        ])
+        for artifacts, keys in (('', ''), ('/ci/artifacts', '/ci/keys')):
+            with self.subTest(artifacts=artifacts, keys=keys):
+                with patch.dict(os.environ, ROUTERFW_ARTIFACTS_DIR=artifacts,
+                                ROUTERFW_KEYS_DIR=keys):
+                    result, commands = self.run_entrypoint()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(commands, [
+                    '1234:5678 /work /work/openwrt /work/downloads /work/ccache /home/builder',
+                    'python3 /inputs/scripts/builder.py make -j1',
+                ])
 
     def test_inaccessible_bind_mount_gets_chown(self):
         for directory in ('/artifacts', '/keys'):
