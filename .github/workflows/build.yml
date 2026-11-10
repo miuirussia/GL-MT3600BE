@@ -2,6 +2,7 @@ name: OpenWrt prerelease
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
@@ -10,7 +11,7 @@ permissions:
 
 concurrency:
   group: openwrt-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -134,12 +135,41 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || format('ci-{0}-{1}', github.run_number, github.run_attempt) }}
+          RELEASE_TAG: ${{ github.ref == 'refs/heads/main' && 'prerelease' || (github.ref_type == 'tag' && github.ref_name || format('ci-{0}-{1}', github.run_number, github.run_attempt)) }}
           RELEASE_COMMIT: ${{ github.sha }}
         run: |
+          if [ "$RELEASE_TAG" = prerelease ]; then
+            main_commit=$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq '.object.sha')
+            if [ "$main_commit" != "$RELEASE_COMMIT" ]; then
+              echo 'Skipping publication: main has a newer commit.'
+              exit 0
+            fi
+          fi
+
           printf 'GL-MT3600BE. Commit: %s\n\nFull build metadata is included in the archive.\n' "$RELEASE_COMMIT" > "$RUNNER_TEMP/release-notes.txt"
-          gh release create "$RELEASE_TAG" release/* \
-            --target "$RELEASE_COMMIT" \
-            --title "GL-MT3600BE $RELEASE_TAG" \
-            --prerelease --latest=false \
-            --notes-file "$RUNNER_TEMP/release-notes.txt"
+          if [ "$RELEASE_TAG" = prerelease ] && gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release/* --clobber
+            # Remove files from older firmware versions after uploading the new assets.
+            gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/release-assets.txt"
+            while IFS= read -r asset; do
+              if [ ! -f "release/$asset" ]; then
+                gh release delete-asset "$RELEASE_TAG" "$asset" --yes
+              fi
+            done < "$RUNNER_TEMP/release-assets.txt"
+            gh release edit "$RELEASE_TAG" \
+              --title "GL-MT3600BE $RELEASE_TAG" \
+              --prerelease --latest=false \
+              --notes-file "$RUNNER_TEMP/release-notes.txt"
+          else
+            gh release create "$RELEASE_TAG" release/* \
+              --target "$RELEASE_COMMIT" \
+              --title "GL-MT3600BE $RELEASE_TAG" \
+              --prerelease --latest=false \
+              --notes-file "$RUNNER_TEMP/release-notes.txt"
+          fi
+
+          if [ "$RELEASE_TAG" = prerelease ]; then
+            # Move the rolling tag only after the build and asset publication succeed.
+            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/prerelease" \
+              -f sha="$RELEASE_COMMIT" -F force=true > /dev/null
+          fi

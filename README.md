@@ -68,14 +68,14 @@ Sources, downloads, and ccache stay in the Linux volume `routerfw_work`; signing
 
 ## GitHub Actions
 
-[build.yml](.github/workflows/build.yml) builds directly on Ubuntu 24.04 without Docker. Run it manually through Actions or push a `v*` tag:
+[build.yml](.github/workflows/build.yml) builds directly on Ubuntu 24.04 without Docker on every push to `main`. A new push cancels the previous run for that branch. You can also run it manually through Actions or push a `v*` tag:
 
 ```sh
 git tag v0.1.0-rc1
 git push origin v0.1.0-rc1
 ```
 
-A successful build creates a **prerelease** containing firmware images, a full build archive, and SHA256SUMS. Manual runs use a `ci-<run>-<attempt>` tag. Existing releases are not overwritten.
+A successful build publishes a **prerelease** containing firmware images, a full build archive, and SHA256SUMS. Builds from `main` update the `prerelease` release, replace its assets, and move the `prerelease` tag to the built commit after publication succeeds. Failed or cancelled builds do not move the tag; outdated runs skip publication if `main` has advanced. Manual runs on other branches use a `ci-<run>-<attempt>` tag. Releases for `v*` and `ci-*` tags are not overwritten.
 
 To reuse the APK signing key across runs, set the `APK_PRIVATE_KEY` repository secret to the contents of `.keys/private-key.pem`. Without this secret, each CI build generates a new key.
 
