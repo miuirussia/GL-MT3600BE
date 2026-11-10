@@ -99,6 +99,7 @@ Use `=y` to include a package in the firmware or `=m` to build a separate APK. P
 | --- | --- |
 | `packages/<name>/` | Local package: `Makefile`, `files/`, `patches/` |
 | `apk/*.apk` | Prebuilt third-party OpenWrt packages included in the firmware |
+| `apk/*.apk.txt` | Download URL and SHA-256 or `SKIP` |
 | `files/` | Files copied into the firmware root filesystem |
 | `uci-defaults/` | First-boot configuration scripts |
 | `patches/openwrt/*.patch` | Patches to the OpenWrt tree |
@@ -130,6 +131,15 @@ cp /path/to/example-1.0-r1.apk apk/
 ./build.sh reset-sources
 ./build.sh
 ```
+
+`apk/example.apk.txt`: HTTP(S) URL on the first line, SHA-256 or `SKIP` (no checksum check) on the second:
+
+```text
+https://example.com/example.apk
+SKIP
+```
+
+Downloaded during source preparation as `example.apk`. A checksum mismatch or an existing `apk/example.apk` stops the build.
 
 Packages must match OpenWrt 25.12 and `aarch64_cortex-a53` or `noarch`. Add dependencies to `configs/packages.config` or supply their APKs in the same directory. Missing dependencies fail the build.
 

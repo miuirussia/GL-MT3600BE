@@ -11,6 +11,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import urllib.parse
 import urllib.request
 
 INPUT = Path(os.environ.get('ROUTERFW_INPUT_DIR', Path(__file__).resolve().parent.parent))
@@ -118,10 +119,32 @@ def install_uci_defaults(destination):
 
 
 def install_apk_packages(destination):
+    names = set()
     for package in input_files('apk'):
         if (package.parent != INPUT / 'apk' or package.is_symlink() or
-                not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+~\-]*\.apk', package.name)):
-            fail('apk/ must contain regular .apk files directly, without subdirectories, symlinks or special characters in filenames.')
+                not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._+~\-]*\.apk(?:\.txt)?', package.name)):
+            fail('apk/ must contain regular .apk files or .apk.txt files directly, without subdirectories, symlinks or special characters in filenames.')
+        name = package.stem if package.suffix == '.txt' else package.name
+        if name in names:
+            fail('Conflicting APK inputs for: ' + name)
+        names.add(name)
+        if package.suffix == '.txt':
+            lines = package.read_text(encoding='utf-8-sig').splitlines()
+            if (len(lines) != 2 or
+                    not re.fullmatch(r'(?:[A-Fa-f0-9]{64}|SKIP)', lines[1].strip())):
+                fail(f'{package.name}: expected a URL on the first line and SHA-256 or SKIP on the second line.')
+            url, digest = (line.strip() for line in lines)
+            parsed = urllib.parse.urlsplit(url)
+            if (parsed.scheme not in ('http', 'https') or not parsed.netloc or
+                    any(char.isspace() for char in url)):
+                fail(f'{package.name}: expected an HTTP(S) URL.')
+            with urllib.request.urlopen(url, timeout=60) as response:
+                data = response.read()
+            if digest != 'SKIP' and sha(data) != digest.lower():
+                fail(f'{package.name}: APK SHA-256 checksum mismatch.')
+            destination.mkdir(parents=True, exist_ok=True)
+            (destination / name).write_bytes(data)
+            continue
         destination.mkdir(parents=True, exist_ok=True)
         shutil.copy2(package, destination / package.name)
 

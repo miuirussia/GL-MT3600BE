@@ -1,5 +1,6 @@
 """Prebuilt APK inputs and installation with the prepared OpenWrt recipe."""
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -7,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -35,8 +37,62 @@ class APKInputs(unittest.TestCase):
                          [self.destination / 'example-1.0-r1.apk'])
         self.assertEqual((self.destination / 'example-1.0-r1.apk').read_bytes(), data)
 
+    def test_downloads_packages_and_checks_sha256(self):
+        data = b'ADB\x00\x80\r\n\x00'
+        url = 'https://example.com/download?id=123'
+        descriptor = self.root / 'apk/example.apk.txt'
+        (self.root / 'apk/local.apk').write_bytes(b'local')
+        for digest in (builder.sha(data), builder.sha(data).upper(), 'SKIP'):
+            with self.subTest(digest=digest):
+                descriptor.write_text(f'\ufeff{url}\r\n{digest}\r\n', encoding='utf-8')
+                with patch.object(builder.urllib.request, 'urlopen', return_value=io.BytesIO(data)) as download:
+                    builder.install_apk_packages(self.destination)
+                download.assert_called_once_with(url, timeout=60)
+                self.assertEqual((self.destination / 'example.apk').read_bytes(), data)
+                self.assertEqual((self.destination / 'local.apk').read_bytes(), b'local')
+                self.assertFalse((self.destination / descriptor.name).exists())
+
+    def test_checksum_mismatch_does_not_install_package(self):
+        (self.root / 'apk/example.apk.txt').write_text('https://example.com/example.apk\n' + '0' * 64 + '\n')
+        with patch.object(builder.urllib.request, 'urlopen', return_value=io.BytesIO(b'wrong package')):
+            with self.assertRaisesRegex(RuntimeError, 'SHA-256 checksum mismatch'):
+                builder.install_apk_packages(self.destination)
+        self.assertFalse((self.destination / 'example.apk').exists())
+
+    def test_rejects_invalid_download_descriptors(self):
+        for content in ('', 'https://example.com/example.apk\n',
+                        'https://example.com/example.apk\ninvalid\n',
+                        'https://example.com/example.apk\nSKIP\nextra\n',
+                        'https://example.com/example.apk\nskip\n',
+                        'file:///tmp/example.apk\nSKIP\n',
+                        'https:///example.apk\nSKIP\n',
+                        'https://example.com/a b.apk\nSKIP\n'):
+            with self.subTest(content=content):
+                (self.root / 'apk/example.apk.txt').write_text(content)
+                with patch.object(builder.urllib.request, 'urlopen') as download:
+                    with self.assertRaises(RuntimeError):
+                        builder.install_apk_packages(self.destination)
+                download.assert_not_called()
+
+    def test_rejects_conflicting_local_and_downloaded_package(self):
+        (self.root / 'apk/example.apk').write_bytes(b'local')
+        (self.root / 'apk/example.apk.txt').write_text('https://example.com/example.apk\nSKIP\n')
+        with patch.object(builder.urllib.request, 'urlopen') as download:
+            with self.assertRaisesRegex(RuntimeError, 'Conflicting APK inputs'):
+                builder.install_apk_packages(self.destination)
+        download.assert_not_called()
+        self.assertEqual((self.destination / 'example.apk').read_bytes(), b'local')
+
+    def test_download_failure_does_not_install_package(self):
+        (self.root / 'apk/example.apk.txt').write_text('https://example.com/example.apk\nSKIP\n')
+        with patch.object(builder.urllib.request, 'urlopen', side_effect=urllib.error.URLError('unavailable')):
+            with self.assertRaises(urllib.error.URLError):
+                builder.install_apk_packages(self.destination)
+        self.assertFalse((self.destination / 'example.apk').exists())
+
     def test_rejects_invalid_inputs(self):
-        for name in ('nested/example.apk', 'example package.apk', 'example.ipk', '$(id).apk'):
+        for name in ('nested/example.apk', 'example package.apk', 'example.ipk', '$(id).apk',
+                     'nested/example.apk.txt', 'example package.apk.txt', '$(id).apk.txt'):
             with self.subTest(name=name):
                 package = self.root / 'apk' / name
                 package.parent.mkdir(parents=True, exist_ok=True)
@@ -62,6 +118,19 @@ class APKInputs(unittest.TestCase):
         with patch.object(builder, 'STAMP', stamp):
             with self.assertRaisesRegex(RuntimeError, 'reset-sources'):
                 builder.prepare({})
+
+    def test_descriptor_change_invalidates_preparation_stamp(self):
+        descriptor = self.root / 'apk/example.apk.txt'
+        descriptor.write_text('https://example.com/example.apk\nSKIP\n')
+        stamp = self.root / 'stamp.json'
+        stamp.write_text(json.dumps({'inputs': builder.source_inputs()}))
+        for content in ('https://example.com/updated.apk\nSKIP\n',
+                        'https://example.com/example.apk\n' + '0' * 64 + '\n'):
+            with self.subTest(content=content):
+                descriptor.write_text(content)
+                with patch.object(builder, 'STAMP', stamp):
+                    with self.assertRaisesRegex(RuntimeError, 'reset-sources'):
+                        builder.prepare({})
 
     def test_prebuilt_packages_require_apk_enabled(self):
         (self.root / 'apk/example.apk').touch()
