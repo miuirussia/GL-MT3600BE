@@ -165,12 +165,18 @@ Replace the URL and SHA with actual values; the lock file requires full commit S
 
 ## uci-defaults
 
-Create a script such as `uci-defaults/99-local-settings`:
+The included `uci-defaults/99-local-settings` sets the hostname to `Beryl7` and the static LAN address to `192.168.69.1/24` on first boot. LuCI is available at `https://192.168.69.1`.
+
+Edit this script to change the defaults:
 
 ```sh
 #!/bin/sh
 uci set system.@system[0].hostname='Beryl7' &&
-    uci commit system
+    uci commit system &&
+    uci set network.lan.proto='static' &&
+    uci set network.lan.ipaddr='192.168.69.1' &&
+    uci set network.lan.netmask='255.255.255.0' &&
+    uci commit network
 ```
 
 The builder checks it with `sh -n` and installs it in `/etc/uci-defaults/` with mode `0755`. A matching filename in `files/etc/uci-defaults/` causes an error. Keep regular files directly in this directory, without subdirectories or symlinks.
