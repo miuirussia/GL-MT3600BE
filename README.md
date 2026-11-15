@@ -95,6 +95,8 @@ CONFIG_PACKAGE_tcpdump=m
 
 Use `=y` to include a package in the firmware or `=m` to build a separate APK. Put other Kconfig options in `configs/custom.config`; these are applied last. Changes under `configs/` do not require a source reset.
 
+Use `configs/kernel.config` for optional Linux kernel overrides (`CONFIG_*`, without the OpenWrt `KERNEL_` prefix). It is empty by default. The builder copies it to OpenWrt's `env/kernel-config`, which is merged after the target defaults; OpenWrt `CONFIG_KERNEL_*` settings, package selections, and Linux dependencies still apply. The overrides are exported as `kernel.config` with the firmware.
+
 | Directory | Contents |
 | --- | --- |
 | `packages/<name>/` | Local package: `Makefile`, `files/`, `patches/` |
@@ -178,6 +180,8 @@ OpenWrt removes each script after it succeeds. Failed scripts may run again, so 
 ## Vermagic
 
 `100-vermagic-override.patch` uses the official OpenWrt ABI hash from `profiles.json`: `f0a7348f9cb959e1bf4d0447669b031e`. The kernel version is checked before building; the resulting hash is checked before export.
+
+The kernel uses the defaults from the locked OpenWrt sources. `CONFIG_ALL_KMODS=n` keeps the build limited to selected kmod packages. Package-dependent kernel options are resolved by OpenWrt Kconfig; the official vermagic override remains enabled.
 
 `configs/device.config` disables `CONFIG_KERNEL_KALLSYMS`, matching the [official release configuration](https://downloads.openwrt.org/releases/25.12.6/targets/mediatek/filogic/config.buildinfo). Enabling it changes `struct module` and prevents official kmods from loading with a `.gnu.linkonce.this_module section size must match` error, even when the forced ABI hash matches. Firmware built before this setting was added must be rebuilt and flashed; reinstalling packages cannot change the running kernel's module layout.
 

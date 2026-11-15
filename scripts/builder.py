@@ -266,6 +266,11 @@ def configure(lock):
     device = 'CONFIG_TARGET_mediatek_filogic_DEVICE_' + lock['device']
     if settings.get(device) != 'y':
         fail('The GL-MT3600BE device selection must remain enabled.')
+    # OpenWrt merges env/kernel-config after the target's kernel defaults.
+    kernel_config = INPUT / 'configs/kernel.config'
+    kernel_override = SOURCE / 'env/kernel-config'
+    kernel_override.parent.mkdir(exist_ok=True)
+    kernel_override.write_text(kernel_config.read_text() if kernel_config.exists() else '')
     (SOURCE / '.config').write_text(''.join(
         f'# {k} is not set\n' if v == 'n' else f'{k}={v}\n' for k, v in settings.items()))
     run('make', 'defconfig')
@@ -305,6 +310,8 @@ def export_artifacts(lock):
     if (SOURCE / 'apk').is_dir():
         shutil.copytree(SOURCE / 'apk', temporary / 'apk')
     shutil.copy2(SOURCE / '.config', temporary / 'config.full')
+    if (SOURCE / 'env/kernel-config').is_file():
+        shutil.copy2(SOURCE / 'env/kernel-config', temporary / 'kernel.config')
     (temporary / 'config.seed').write_text(run('./scripts/diffconfig.sh', capture=True) + '\n')
     shutil.copy2(INPUT / 'openwrt.lock.json', temporary)
     shutil.copy2(WORK / 'profiles.json', temporary / 'reference-profiles.json')
