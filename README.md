@@ -95,7 +95,7 @@ CONFIG_PACKAGE_tcpdump=m
 
 Use `=y` to include a package in the firmware or `=m` to build a separate APK. Put other Kconfig options in `configs/custom.config`; these are applied last. Changes under `configs/` do not require a source reset.
 
-Use `configs/kernel.config` for optional Linux kernel overrides (`CONFIG_*`, without the OpenWrt `KERNEL_` prefix). It is empty by default. The builder copies it to OpenWrt's `env/kernel-config`, which is merged after the target defaults; OpenWrt `CONFIG_KERNEL_*` settings, package selections, and Linux dependencies still apply. The overrides are exported as `kernel.config` with the firmware.
+Use `configs/kernel.config` for Linux kernel overrides (`CONFIG_*`, without the OpenWrt `KERNEL_` prefix). It enables built-in conntrack events and labels, netfilter egress, traffic-control actions, XFRM, TLS offload, FS-Cache, 16-port UART limits, and `/proc/config.gz`. The builder copies it to OpenWrt's `env/kernel-config`, which is merged after the target defaults; OpenWrt `CONFIG_KERNEL_*` settings, package selections, and Linux dependencies still apply. The overrides are exported as `kernel.config` with the firmware. `010-netfs-kconfig-prompt.patch` makes the netfs core directly selectable for FS-Cache.
 
 | Directory | Contents |
 | --- | --- |
