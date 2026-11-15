@@ -179,6 +179,8 @@ OpenWrt removes each script after it succeeds. Failed scripts may run again, so 
 
 `100-vermagic-override.patch` uses the official OpenWrt ABI hash from `profiles.json`: `f0a7348f9cb959e1bf4d0447669b031e`. The kernel version is checked before building; the resulting hash is checked before export.
 
+`configs/device.config` disables `CONFIG_KERNEL_KALLSYMS`, matching the [official release configuration](https://downloads.openwrt.org/releases/25.12.6/targets/mediatek/filogic/config.buildinfo). Enabling it changes `struct module` and prevents official kmods from loading with a `.gnu.linkonce.this_module section size must match` error, even when the forced ABI hash matches. Firmware built before this setting was added must be rebuilt and flashed; reinstalling packages cannot change the running kernel's module layout.
+
 A matching hash does not guarantee kmod compatibility after changing the kernel configuration or sources. The patch does not disable Linux module loading checks. Build kmods alongside the firmware when modifying the kernel.
 
 To restore the original hash calculation, set `kernel.vermagic_mode` to `"native"` in the lock file and run `reset-sources`.
