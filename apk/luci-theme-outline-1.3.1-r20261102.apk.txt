@@ -1,0 +1,2 @@
+https://github.com/tickcount/luci-theme-outline/releases/download/v1.3.1/luci-theme-outline-1.3.1-r20261102.apk
+3b8096eee89e4f5f0343e87d3c5649abddab832f1f71d81233bf2a5d18fea2f6

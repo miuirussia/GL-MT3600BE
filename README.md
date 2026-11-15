@@ -1,6 +1,6 @@
 # OpenWrt for GL-MT3600BE
 
-Build [OpenWrt 25.12.6](https://downloads.openwrt.org/releases/25.12.6/targets/mediatek/filogic/) for `glinet_gl-mt3600be`, `mediatek/filogic`, Linux 6.12.112. Includes LuCI with HTTPS and English and Russian interface languages.
+Build [OpenWrt 25.12.6](https://downloads.openwrt.org/releases/25.12.6/targets/mediatek/filogic/) for `glinet_gl-mt3600be`, `mediatek/filogic`, Linux 6.12.112. Includes LuCI with HTTPS, the Outline theme, and English and Russian interface languages.
 
 ## Build
 
@@ -125,6 +125,8 @@ After changing local packages, prebuilt APKs, the `files/` overlay, `uci-default
 Downloads, ccache, signing keys, and exported artifacts are preserved. Save any source edits made inside Docker as patches before resetting.
 
 ## Prebuilt APKs
+
+The firmware includes [luci-theme-outline 1.3.1](https://github.com/tickcount/luci-theme-outline/releases/tag/v1.3.1) from its OpenWrt 25.12 APK. `apk/luci-theme-outline-1.3.1-r20261102.apk.txt` pins the release URL and SHA-256; its runtime dependencies are selected in `configs/packages.config`. The package's own first-boot script registers and activates Outline. Appearance settings are available under **System → Outline Theme**; Bootstrap remains installed as an alternative. To update the theme in future builds, update the descriptor's filename, URL, and checksum, then run `reset-sources` and rebuild.
 
 Place OpenWrt `.apk` files in `apk/`. All packages in this directory are included in the firmware without Kconfig entries:
 
