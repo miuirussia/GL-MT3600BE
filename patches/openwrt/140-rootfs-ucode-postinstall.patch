@@ -1,0 +1,36 @@
+From: Router firmware builder
+Subject: [PATCH] rootfs: run ucode post-install scripts with the host interpreter
+
+Prebuilt APKs can carry ucode maintainer scripts. They cannot be parsed by
+bash or run with the target interpreter while assembling a cross-built
+root filesystem. Build host ucode and preserve IPKG_INSTROOT when running
+these scripts, retaining the existing shell handling and failure checks.
+
+--- a/package/Makefile
++++ b/package/Makefile
+@@ -85,6 +85,7 @@
+   $(curdir)//compile = $(STAGING_DIR)/.prepared $(BIN_DIR)
+ ifneq ($(CONFIG_USE_APK),)
+   $(curdir)//compile += $(curdir)/system/apk/host/compile $(BUILD_KEY_APK_SEC) $(BUILD_KEY_APK_PUB)
++  $(curdir)//compile += $(curdir)/utils/ucode/host/compile
+ else
+   $(curdir)/compile: $(curdir)/system/opkg/host/compile
+ endif
+--- a/include/rootfs.mk
++++ b/include/rootfs.mk
+@@ -93,7 +93,14 @@
+ 			IPKG_POSTINST_PATH=./usr/lib/opkg/info/*.postinst; \
+ 		fi; \
+ 		for script in $$IPKG_POSTINST_PATH; do \
+-			IPKG_INSTROOT=$(1) $$(command -v bash) $$script; \
++			case "$$(head -n 1 $$script)" in \
++				'#!/usr/bin/ucode') \
++					IPKG_INSTROOT=$(1) $(STAGING_DIR_HOSTPKG)/bin/ucode $$script; \
++					;; \
++				*) \
++					IPKG_INSTROOT=$(1) $$(command -v bash) $$script; \
++					;; \
++			esac; \
+ 			ret=$$?; \
+ 			if [ $$ret -ne 0 ]; then \
+ 				echo "postinst script $$script has failed with exit code $$ret" >&2; \

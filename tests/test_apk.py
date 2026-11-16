@@ -154,14 +154,19 @@ class APKInstallation(unittest.TestCase):
             raise unittest.SkipTest('Requires the host APK tool and fakeroot after prepare/build.')
         cls.package_makefile = (builder.SOURCE / 'package/Makefile').read_text()
         cls.rootfs_makefile = (builder.SOURCE / 'include/rootfs.mk').read_text()
+        cls.ucode = Path(os.environ.get('ROUTERFW_UCODE', builder.SOURCE / 'staging_dir/hostpkg/bin/ucode'))
 
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name)
-        for name in ('apk', 'repo', 'tmp', 'host/bin', 'staging', 'staging-root'):
+        for name in ('apk', 'repo', 'tmp', 'host/bin', 'hostpkg/bin', 'staging', 'staging-root'):
             (self.root / name).mkdir(parents=True)
         (self.root / 'host/bin/apk').symlink_to(self.apk)
+        for name in ('gzip', 'tar'):
+            (self.root / 'host/bin' / name).symlink_to(shutil.which(name))
+        if self.ucode.is_file():
+            (self.root / 'hostpkg/bin/ucode').symlink_to(self.ucode)
         self.command('openssl', 'ecparam', '-name', 'prime256v1', '-genkey',
                      '-noout', '-out', self.root / 'private-key.pem')
         public = self.command('openssl', 'ec', '-in', self.root / 'private-key.pem', '-pubout')
@@ -179,6 +184,8 @@ class APKInstallation(unittest.TestCase):
         end = self.package_makefile.index('\n\trm -rf $(TARGET_DIR)/run', start)
         apk_start = self.rootfs_makefile.index('apk =')
         apk_end = self.rootfs_makefile.index('\nTARGET_DIR_ORIG', apk_start)
+        prepare_start = self.rootfs_makefile.index('define prepare_rootfs\n')
+        prepare_end = self.rootfs_makefile.index('\nendef', prepare_start) + len('\nendef')
         makefile = (
             f'TOPDIR := {self.root}\n'
             'curdir := package\n'
@@ -188,21 +195,25 @@ class APKInstallation(unittest.TestCase):
             'STAGING_DIR := $(TOPDIR)/staging\n'
             'STAGING_DIR_ROOT := $(TOPDIR)/staging-root\n'
             'STAGING_DIR_HOST := $(TOPDIR)/host\n'
+            'STAGING_DIR_HOSTPKG := $(TOPDIR)/hostpkg\n'
             'PACKAGE_DIR_ALL := $(TOPDIR)/repo\n'
             'BUILD_KEY_APK_SEC := $(TOPDIR)/private-key.pem\n'
             'CONFIG_USE_APK := y\nCONFIG_SIGNED_PACKAGES := y\n'
             'ARCH_PACKAGES := aarch64_cortex-a53\n'
             f'FAKEROOT := {self.fakeroot}\nXARGS := xargs\n'
             + self.rootfs_makefile[apk_start:apk_end] + '\n'
+            + self.rootfs_makefile[prepare_start:prepare_end] + '\n'
             + self.package_makefile[start:end] + '\nendif\n'
-            'package/merge package/merge-index:\n\t@:\n')
+            'package/merge package/merge-index:\n\t@:\n'
+            'prepare-rootfs:\n\t$(call prepare_rootfs,$(TARGET_DIR))\n')
         (self.root / 'Makefile').write_text(makefile)
 
     def command(self, *args, check=True):
         return subprocess.run(list(map(str, args)), cwd=self.root, text=True,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=check)
 
-    def make_package(self, name, destination, arch='aarch64_cortex-a53', depends=None, signed=False):
+    def make_package(self, name, destination, arch='aarch64_cortex-a53', depends=None,
+                     signed=False, post_install=None):
         files = self.root / 'payload' / name
         files.mkdir(parents=True)
         (files / name).write_text(name + '\n')
@@ -214,6 +225,10 @@ class APKInstallation(unittest.TestCase):
             args += ['--info', 'depends:' + depends]
         if signed:
             args += ['--sign', self.root / 'private-key.pem']
+        if post_install is not None:
+            script = self.root / (name + '.post-install')
+            script.write_text(post_install)
+            args += ['--script', 'post-install:' + str(script)]
         self.command(*args)
         return package
 
@@ -256,6 +271,44 @@ class APKInstallation(unittest.TestCase):
     def test_empty_directory_preserves_normal_installation(self):
         self.install()
         self.assertTrue((self.root / 'rootfs/base-files').is_file())
+
+    def test_rootfs_runs_shell_and_ucode_postinstall_with_offline_root(self):
+        if not self.ucode.is_file():
+            self.skipTest('Requires the host ucode interpreter.')
+        self.make_package('test-shell', self.root / 'apk', post_install=(
+            '#!/bin/sh\nprintf shell > "$IPKG_INSTROOT/shell-ran"\n'))
+        self.make_package('test-ucode', self.root / 'apk', post_install=(
+            '#!/usr/bin/ucode\n'
+            'import { writefile } from "fs";\n'
+            'let root = getenv("IPKG_INSTROOT");\n'
+            'if (root == null || root == "") exit(99);\n'
+            'writefile(root + "/ucode-ran", "ucode");\n'))
+        self.install()
+        rootfs = self.root / 'rootfs'
+        self.assertFalse((rootfs / 'shell-ran').exists())
+        self.assertFalse((rootfs / 'ucode-ran').exists())
+        result = self.command('make', '-s', 'prepare-rootfs', check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((rootfs / 'shell-ran').read_text(), 'shell')
+        self.assertEqual((rootfs / 'ucode-ran').read_text(), 'ucode')
+        archive = self.command('tar', '-tzf', rootfs / 'lib/apk/db/scripts.tar.gz')
+        self.assertNotIn('.post-install', archive.stdout)
+
+    def assert_postinstall_failure(self, script, exit_code):
+        self.make_package('test-failure', self.root / 'apk', post_install=script)
+        self.install()
+        result = self.command('make', '-s', 'prepare-rootfs', check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('postinst script', result.stderr)
+        self.assertIn(f'exit code {exit_code}', result.stderr)
+
+    def test_rootfs_stops_on_failed_shell_postinstall(self):
+        self.assert_postinstall_failure('#!/bin/sh\nexit 17\n', 17)
+
+    def test_rootfs_stops_on_failed_ucode_postinstall(self):
+        if not self.ucode.is_file():
+            self.skipTest('Requires the host ucode interpreter.')
+        self.assert_postinstall_failure('#!/usr/bin/ucode\nexit(23);\n', 23)
 
 
 if __name__ == '__main__':
