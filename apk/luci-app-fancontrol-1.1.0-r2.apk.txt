@@ -1,0 +1,2 @@
+https://github.com/zkcaryq/luci-app-fancontrol/releases/download/continuous/luci-app-fancontrol-1.1.0-r2.apk
+f6a7c2e04a3f38e150c172c38494ae259af1cab354577415dcfe99ff6a04ceae

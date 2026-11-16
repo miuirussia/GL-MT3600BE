@@ -1,0 +1,2 @@
+https://raw.githubusercontent.com/gSpotx2f/packages-openwrt/f0bffc664a979fdb5843807d001b7e48db65e177/25.12/luci-app-temp-status-0.8.1-r1.apk
+3ff699e51a890b59f8a8b7fa4f7a2bd868f4cbbeef7d3d61f420320bcb90be50

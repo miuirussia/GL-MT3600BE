@@ -1,0 +1,2 @@
+https://raw.githubusercontent.com/gSpotx2f/packages-openwrt/f0bffc664a979fdb5843807d001b7e48db65e177/25.12/luci-i18n-temp-status-ru-0.8.1-r1.apk
+8bfbbf637ccffb35b6701303a1f9bcb82ae90fc979d7d43ebd4f69226c814a7d

@@ -1,39 +1,30 @@
 # OpenWrt for GL-MT3600BE
 
-Build [OpenWrt 25.12.6](https://downloads.openwrt.org/releases/25.12.6/targets/mediatek/filogic/) for `glinet_gl-mt3600be`, `mediatek/filogic`, Linux 6.12.112. Includes LuCI with HTTPS, the Outline theme, and English and Russian interface languages.
+[OpenWrt 25.12.6](https://downloads.openwrt.org/releases/25.12.6/targets/mediatek/filogic/) for `glinet_gl-mt3600be` (`mediatek/filogic`), Linux 6.12.112. Includes LuCI with HTTPS, English and Russian, the Outline theme, Forkop, fan control, temperature sensors, and zram swap.
+
+On first boot: hostname `Beryl7`, LAN `192.168.69.1/24`, LuCI at **https://192.168.69.1**. Change these defaults in [uci-defaults/99-local-settings](uci-defaults/99-local-settings).
 
 ## Build
 
-Requires Docker with Compose. Builds default to four parallel jobs (`JOBS=4`); CPU, RAM, and disk needs depend on the selected packages. The launchers support Linux, macOS, and Windows; builds run in a Linux container.
+Requires Docker with Compose. Builds run in a Linux container with four parallel jobs by default.
 
-### Linux and macOS
+Linux and macOS:
 
 ```sh
-./build.sh                       # Build the Docker image and firmware
-JOBS=8 ./build.sh                # Default: JOBS=4
+./build.sh
+JOBS=8 ./build.sh                # Override the default JOBS=4
 ```
 
-### Windows
-
-Install [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) with the WSL 2 backend and start it in Linux containers mode. Run from the project directory in Windows PowerShell 5.1 or PowerShell 7:
+Windows: start Docker Desktop with the WSL 2 backend and Linux containers, then run in PowerShell:
 
 ```powershell
-.\build.ps1                       # Build the Docker image and firmware
-$env:JOBS = '8'; .\build.ps1       # Default: JOBS=4
-```
-
-If PowerShell blocks local scripts, allow them for the current session:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\build.ps1
+$env:JOBS = '8'; .\build.ps1
 ```
 
-Git attributes keep build inputs at LF. Save new shell scripts, patches, and package recipes with LF endings. For an older checkout with CRLF inputs, use a fresh clone and preserve your local edits. In a WSL Linux checkout, use `./build.sh`.
+If PowerShell blocks scripts, run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`. In WSL, use `./build.sh`. Keep shell scripts, patches, and package recipes at LF; `.gitattributes` handles this for new checkouts.
 
-### Commands
-
-Pass these commands to `./build.sh` or `.\build.ps1`:
+Both launchers accept the same commands:
 
 | Command | Action |
 | --- | --- |
@@ -46,57 +37,34 @@ Pass these commands to `./build.sh` or `.\build.ps1`:
 | `make -j1 package/htop/compile V=s` | Build a single package |
 | `reset-sources` | Remove the source tree and compiled files |
 
-After `menuconfig`, save your selection on the host:
+For example, `./build.sh menuconfig`. To keep the selection:
 
 ```sh
 cp artifacts/menuconfig.config configs/custom/menuconfig.config
 ```
 
-In PowerShell, use `Copy-Item artifacts/menuconfig.config configs/custom/menuconfig.config`.
+In PowerShell: `Copy-Item artifacts/menuconfig.config configs/custom/menuconfig.config`.
 
-### Output and storage
-
-Output goes to `artifacts/25.12.6/`. The firmware image is:
+Output: `artifacts/25.12.6/`, replaced after each successful build. The sysupgrade image is under:
 
 ```text
 bin/targets/mediatek/filogic/openwrt-25.12.6-mediatek-filogic-glinet_gl-mt3600be-squashfs-sysupgrade.bin
 ```
 
-The output also includes APK packages, configuration, the lock file, a build manifest, and `SHA256SUMS`. Each successful build replaces the previous output directory. Package symlinks are exported as regular files or directories, so Windows symlink privileges are not required.
+The output also contains APKs, configuration, build metadata, and `SHA256SUMS`. Sources, downloads, and ccache stay in the Docker volume `routerfw_work`; signing keys stay in `.keys/`. Docker uses `linux/amd64`, emulated on Apple Silicon.
 
-Sources, downloads, and ccache stay in the Linux volume `routerfw_work`; signing keys are stored in `.keys/`. With rootless Docker (including Lima), outputs and keys may be staged in the work volume and copied to the host when the command exits, including after a build failure.
+## Configuration
 
-## GitHub Actions
-
-[build.yml](.github/workflows/build.yml) builds directly on Ubuntu 24.04 without Docker on every push to `main`. A new push cancels the previous run for that branch. You can also run it manually through Actions or push a `v*` tag:
-
-```sh
-git tag v0.1.0-rc1
-git push origin v0.1.0-rc1
-```
-
-A successful build publishes a **prerelease** containing firmware images, a full build archive, and SHA256SUMS. Builds from `main` update the `prerelease` release, replace its assets, and move the `prerelease` tag to the built commit after publication succeeds. Failed or cancelled builds do not move the tag; outdated runs skip publication if `main` has advanced. Manual runs on other branches use a `ci-<run>-<attempt>` tag. Releases for `v*` and `ci-*` tags are not overwritten.
-
-To reuse the APK signing key across runs, set the `APK_PRIVATE_KEY` repository secret to the contents of `.keys/private-key.pem`. Without this secret, each CI build generates a new key.
-
-Docker and Actions use the same builder, lock file, configuration, and dependency list in `scripts/build-packages.txt`. Actions caches downloads and ccache; installed system package versions are recorded in `builder-packages.txt`.
-
-Actions restores the latest cache for the same inputs, falling back to one with the same lock file and dependency list, then saves a new snapshot after each build attempt, including failed builds. Cancelled runs do not save a cache. Compiler identity is checked by content so rebuilding the toolchain does not invalidate ccache solely because compiler timestamps changed. The first build with this setting warms the compiler cache; later builds can reuse it. The job summary reports cache hits and misses for the current build. Sources, `build_dir`, and `staging_dir` are not cached, so tools and toolchain builds, configuration, and linking still take time.
-
-## Packages and configuration
-
-Configuration is split into topic files in four sections:
-
-| Section | Contents |
+| Path | Contents |
 | --- | --- |
 | `configs/device/*.config` | Target, image, build settings, and OpenWrt kernel options |
-| `configs/packages/*.config` | Package selections and prebuilt APK dependencies |
-| `configs/custom/*.config` | Local OpenWrt overrides and saved menuconfig selections |
-| `configs/kernel/*.config` | Linux kernel overrides |
+| `configs/packages/*.config` | Package selections and dependencies of prebuilt APKs |
+| `configs/custom/*.config` | Local overrides and saved menuconfig selections |
+| `configs/kernel/*.config` | Linux kernel overrides, merged separately |
 
-OpenWrt settings are loaded in section order: `device`, `packages`, then `custom`. Within each section, `*.config` files directly in the directory are loaded in filename order; the last value for an option wins. Linux kernel fragments are merged separately in filename order. Add new topic files as needed.
+OpenWrt fragments load in order: `device`, `packages`, `custom`; files within each section load alphabetically. The last value wins. Configuration changes do not require `reset-sources`.
 
-Add package selections to any `configs/packages/*.config` file, for example `configs/packages/tools.config`:
+Add packages to `configs/packages/*.config`:
 
 ```config
 CONFIG_PACKAGE_htop=y
@@ -104,69 +72,66 @@ CONFIG_PACKAGE_curl=y
 CONFIG_PACKAGE_tcpdump=m
 ```
 
-Use `=y` to include a package in the firmware or `=m` to build a separate APK. Put other Kconfig options in `configs/custom/*.config`; these are applied last. Changes under `configs/` do not require a source reset.
+`=y` includes a package in the firmware; `=m` builds a separate APK. Use `configs/custom/*.config` for other OpenWrt options.
 
-Use `configs/kernel/*.config` for Linux kernel overrides (`CONFIG_*`, without the OpenWrt `KERNEL_` prefix). It enables built-in conntrack events and labels, netfilter egress, traffic-control actions, XFRM, TLS offload, FS-Cache, 16-port UART limits, and `/proc/config.gz`. The builder merges these files into OpenWrt's `env/kernel-config`, which is merged after the target defaults; OpenWrt `CONFIG_KERNEL_*` settings, package selections, and Linux dependencies still apply. The overrides are exported as `kernel.config` with the firmware. `010-netfs-kconfig-prompt.patch` makes the netfs core directly selectable for FS-Cache.
+Linux overrides in `configs/kernel/` use `CONFIG_*` without the OpenWrt `KERNEL_` prefix. They enable conntrack events and labels, netfilter egress, traffic-control actions, XFRM, TLS offload, FS-Cache, and `/proc/config.gz`, and set 16-port UART limits. They merge after target defaults, remain subject to Kconfig dependencies, and are exported as `kernel.config`.
 
-| Directory | Contents |
+## Packages and patches
+
+| Path | Contents |
 | --- | --- |
-| `packages/<name>/` | Local package: `Makefile`, `files/`, `patches/` |
-| `apk/*.apk` | Prebuilt third-party OpenWrt packages included in the firmware |
-| `apk/*.apk.txt` | Download URL and SHA-256 or `SKIP` |
-| `files/` | Files copied into the firmware root filesystem |
-| `uci-defaults/` | First-boot configuration scripts |
-| `patches/openwrt/*.patch` | Patches to the OpenWrt tree |
-| `patches/feeds/<feed>/*.patch` | Patches to a feed checkout |
+| `packages/<name>/` | Local package recipes, files, and patches |
+| `apk/` | Prebuilt APKs or download descriptors |
+| `files/` | Root filesystem overlay |
+| `uci-defaults/` | First-boot shell scripts |
+| `patches/openwrt/*.patch` | OpenWrt patches |
+| `patches/feeds/<feed>/*.patch` | Feed patches |
 | `patches/kernel/*.patch` | Linux source patches |
 
-Patches are applied in filename order. OpenWrt and feed patches must use `a/...` and `b/...` paths relative to the repository root. Kernel patches are appended to the upstream patch series and applied during `target/linux/prepare`.
-
-Included network workarounds:
-
-- `110-mt76-mt7996-always-apply-txd.patch`: always fills TXWI and sets `MT_CT_INFO_APPLY_TXD` in mt7996 to address slow IPv4 NAT downloads over Wi-Fi ([mt76 #1043](https://github.com/openwrt/mt76/issues/1043#issuecomment-4414905981)).
-- `120-gl-mt3600be-disable-broken-eee.patch`: disables 100BASE-TX and 1000BASE-T EEE advertisement on the external RTL8221B PHY to address packet loss and slow Ethernet transmission ([OpenWrt #20967](https://github.com/openwrt/openwrt/issues/20967), [PR #25996](https://github.com/openwrt/openwrt/pull/25996)). Hardware validation on GL-MT3600BE is still needed.
-
-After changing local packages, prebuilt APKs, the `files/` overlay, `uci-defaults/` scripts, patches, or the lock file:
+After changing any of these or `openwrt.lock.json`, reset and rebuild:
 
 ```sh
 ./build.sh reset-sources
 ./build.sh
 ```
 
-Downloads, ccache, signing keys, and exported artifacts are preserved. Save any source edits made inside Docker as patches before resetting.
+This preserves downloads, ccache, keys, and exported artifacts. Save source edits made inside Docker as patches before resetting.
 
-## Prebuilt APKs
+Patches apply alphabetically. OpenWrt and feed patches use `a/...` and `b/...` paths relative to the respective repository root. Kernel patches follow the upstream series during `target/linux/prepare`.
 
-The firmware includes [luci-theme-outline 1.4.1](https://github.com/tickcount/luci-theme-outline/releases/tag/v1.4.1) from its OpenWrt 25.12 APK. `apk/luci-theme-outline-1.4.1-r20261116.apk.txt` pins the release URL and SHA-256; its runtime dependencies are selected in `configs/packages/outline.config`. The package's own first-boot script registers and activates Outline. Appearance settings are available under **System → System → Language and Style**; Bootstrap remains installed as an alternative. To update the theme in future builds, update the descriptor's filename, URL, and checksum, then run `reset-sources` and rebuild.
+Two network workarounds are included:
 
-The firmware also includes [Forkop 2.0.18](https://github.com/miuirussia/forkop/releases/tag/2.0.18), its LuCI app and Russian translation, and [sing-box-forkop 1.14.4-r5](https://github.com/miuirussia/sing-box-forkop/releases/tag/v1.14.4-r5) (`base`, `aarch64_cortex-a53`). Their descriptors in `apk/` pin the release URLs and SHA-256 checksums; runtime dependencies are selected in `configs/packages/forkop.config`. These are the latest releases as of 2026-11-16. To update them, change the descriptor filenames, URLs, and checksums, then run `reset-sources` and rebuild. Forkop settings are available under **Services → Forkop**.
+- [110-mt76-mt7996-always-apply-txd.patch](patches/openwrt/110-mt76-mt7996-always-apply-txd.patch) addresses slow IPv4 NAT downloads over Wi-Fi ([mt76 #1043](https://github.com/openwrt/mt76/issues/1043#issuecomment-4414905981)).
+- [120-gl-mt3600be-disable-broken-eee.patch](patches/openwrt/120-gl-mt3600be-disable-broken-eee.patch) disables 100/1000BASE-T EEE advertisement on the external RTL8221B PHY to address packet loss and slow Ethernet transmission ([OpenWrt #20967](https://github.com/openwrt/openwrt/issues/20967), [PR #25996](https://github.com/openwrt/openwrt/pull/25996)). Hardware validation on GL-MT3600BE is still needed.
 
-Place OpenWrt `.apk` files in `apk/`. All packages in this directory are included in the firmware without Kconfig entries:
+### Prebuilt APKs
 
-```sh
-cp /path/to/example-1.0-r1.apk apk/
-./build.sh reset-sources
-./build.sh
-```
+| Package | Version | LuCI location |
+| --- | --- | --- |
+| [Outline](https://github.com/tickcount/luci-theme-outline/releases/tag/v1.4.1) | 1.4.1 | System → System → Language and Style |
+| [Forkop](https://github.com/miuirussia/forkop/releases/tag/2.0.18), LuCI app and Russian translation | 2.0.18 | Services → Forkop |
+| [sing-box-forkop](https://github.com/miuirussia/sing-box-forkop/releases/tag/v1.14.4-r5) | 1.14.4-r5, `base` | — |
+| [luci-app-fancontrol](https://github.com/zkcaryq/luci-app-fancontrol) | 1.1.0-r2 | System → Fan Control |
+| [luci-app-temp-status](https://github.com/gSpotx2f/luci-app-temp-status), Russian translation | 0.8.1-r1 | Status page |
 
-`apk/example.apk.txt`: HTTP(S) URL on the first line, SHA-256 or `SKIP` (no checksum check) on the second:
+Outline is enabled by default; Bootstrap remains available. Fan control defaults to system control. Runtime dependencies are selected in `configs/packages/{outline,forkop,system}.config`; `system.config` also enables `zram-swap`.
+
+To add a package, place its `.apk` in `apk/`, or create `apk/example.apk.txt` with a download URL and SHA-256 on separate lines:
 
 ```text
 https://example.com/example.apk
 SKIP
 ```
 
-Downloaded during source preparation as `example.apk`. A checksum mismatch or an existing `apk/example.apk` stops the build.
+Replace `SKIP` with the checksum to verify the download. The builder downloads this as `example.apk`; a checksum mismatch or an existing file with that name stops the build.
 
-Packages must match OpenWrt 25.12 and `aarch64_cortex-a53` or `noarch`. Add dependencies to `configs/packages/*.config` or supply their APKs in the same directory. Missing dependencies fail the build.
+All APKs in this directory enter the firmware without Kconfig entries. They must match OpenWrt 25.12 and `aarch64_cortex-a53` or `noarch`. Select dependencies in `configs/packages/` or supply their APKs; missing dependencies fail the build. Use regular files directly in `apk/`, with simple filenames. Copies are re-signed with the build key and exported under `artifacts/25.12.6/apk/`.
 
-Use regular files with simple filenames; subdirectories and symlinks are not supported. The builder re-signs copies with its build key and exports them under `artifacts/25.12.6/apk/`.
+To update a package, change its descriptor filename, URL, and checksum, then reset and rebuild. Included descriptors pin SHA-256 checksums. Fancontrol uses a `continuous` release asset, which upstream may replace or remove; temp-status URLs are pinned to a commit.
 
-Run `reset-sources` after changing files in `apk/`.
+### Third-party feeds
 
-## Third-party feeds
-
-Add a repository to the `feeds` array in `openwrt.lock.json`:
+Add an entry to the `feeds` array in `openwrt.lock.json`:
 
 ```json
 {
@@ -176,47 +141,41 @@ Add a repository to the `feeds` array in `openwrt.lock.json`:
 }
 ```
 
-Replace the URL and SHA with actual values; the lock file requires full commit SHAs. Use feeds compatible with OpenWrt 25.12 and its APK package manager, then select packages in `configs/packages/*.config`. Pin `PKG_SOURCE_VERSION` and source archive hashes in local recipes.
+Use feeds compatible with OpenWrt 25.12 and APK, then select their packages in `configs/packages/`. Local recipes should pin `PKG_SOURCE_VERSION` and source archive hashes.
 
-## uci-defaults
+### First-boot scripts
 
-The included `uci-defaults/99-local-settings` sets the hostname to `Beryl7` and the static LAN address to `192.168.69.1/24` on first boot. LuCI is available at `https://192.168.69.1`.
+Place shell scripts directly in `uci-defaults/`. The builder checks them with `sh -n` and installs them in `/etc/uci-defaults/` with mode `0755`. Subdirectories, symlinks, and filenames duplicated in `files/etc/uci-defaults/` are rejected.
 
-Edit this script to change the defaults:
+OpenWrt removes scripts after they succeed and retries failed scripts. Make them safe to repeat and return zero only after configuration succeeds.
 
-```sh
-#!/bin/sh
-uci set system.@system[0].hostname='Beryl7' &&
-    uci commit system &&
-    uci set network.lan.proto='static' &&
-    uci set network.lan.ipaddr='192.168.69.1' &&
-    uci set network.lan.netmask='255.255.255.0' &&
-    uci commit network
-```
+## Official kmods
 
-The builder checks it with `sh -n` and installs it in `/etc/uci-defaults/` with mode `0755`. A matching filename in `files/etc/uci-defaults/` causes an error. Keep regular files directly in this directory, without subdirectories or symlinks.
+`100-vermagic-override.patch` forces the official ABI hash from `profiles.json`: `f0a7348f9cb959e1bf4d0447669b031e`. The builder checks the kernel version before building and the hash before export. The firmware includes the official APK kmod repository for this kernel.
 
-OpenWrt removes each script after it succeeds. Failed scripts may run again, so make them safe to repeat and ensure they return a zero status only after successful configuration.
+`configs/device/kernel.config` disables `CONFIG_KERNEL_KALLSYMS` to match the official release. Enabling it changes `struct module` and causes `.gnu.linkonce.this_module section size must match` errors with official kmods, even with the forced hash. Existing firmware needs rebuilding and flashing to apply this setting.
 
-## Vermagic
+The hash alone does not guarantee compatibility after kernel changes; Linux module loading checks remain active. Build kmods with the firmware when modifying the kernel. To restore native hash calculation, set `kernel.vermagic_mode` to `"native"` in the lock file, then reset and rebuild.
 
-`100-vermagic-override.patch` uses the official OpenWrt ABI hash from `profiles.json`: `f0a7348f9cb959e1bf4d0447669b031e`. The kernel version is checked before building; the resulting hash is checked before export.
+## GitHub Actions
 
-`files/etc/apk/repositories.d/kmods.list` adds the official kmod repository for Linux `6.12.112-1-f0a7348f9cb959e1bf4d0447669b031e` to the firmware's APK configuration.
+[build.yml](.github/workflows/build.yml) builds on Ubuntu 24.04 on pushes to `main`, `v*` tags, or manual runs. It uses the same builder and inputs as Docker.
 
-The kernel uses the defaults from the locked OpenWrt sources. `CONFIG_ALL_KMODS=n` keeps the build limited to selected kmod packages. Package-dependent kernel options are resolved by OpenWrt Kconfig; the official vermagic override remains enabled.
+Successful builds publish firmware, a full build archive, and checksums as a prerelease:
 
-`configs/device/kernel.config` disables `CONFIG_KERNEL_KALLSYMS`, matching the [official release configuration](https://downloads.openwrt.org/releases/25.12.6/targets/mediatek/filogic/config.buildinfo). Enabling it changes `struct module` and prevents official kmods from loading with a `.gnu.linkonce.this_module section size must match` error, even when the forced ABI hash matches. Firmware built before this setting was added must be rebuilt and flashed; reinstalling packages cannot change the running kernel's module layout.
+- `main` updates the rolling `prerelease` release and tag. Failed, cancelled, or outdated builds do not move the tag.
+- `v*` tags create separate releases.
+- Manual runs on other branches use `ci-<run>-<attempt>` tags.
 
-A matching hash does not guarantee kmod compatibility after changing the kernel configuration or sources. The patch does not disable Linux module loading checks. Build kmods alongside the firmware when modifying the kernel.
+Set the repository secret `APK_PRIVATE_KEY` to the contents of `.keys/private-key.pem` to reuse the signing key. Without it, each CI build generates a new key.
 
-To restore the original hash calculation, set `kernel.vermagic_mode` to `"native"` in the lock file and run `reset-sources`.
+Actions caches downloads and ccache, including after failed builds. It rebuilds the source tree and toolchain each run; cache statistics appear in the job summary.
 
-## Reproducibility
+## Build reproducibility
 
-The OpenWrt commit, feed commits, release metadata checksum, and source epoch are pinned. Docker uses `ubuntu:24.04` without an image digest; apt repositories and dependency versions are not pinned. Actions also installs dependencies from Ubuntu repositories. Both build environments can therefore change over time; exported `builder-packages.txt` records the installed package versions but does not pin them. Docker uses `linux/amd64`, emulated on Apple Silicon.
+`openwrt.lock.json` pins OpenWrt and feed commits, release metadata, and the source epoch. The Ubuntu image and apt packages are not pinned; installed versions are recorded in `builder-packages.txt`. Bit-for-bit reproducibility has not been verified.
 
-The APK signing key is generated in `.keys/` and reused across builds. Transfer it separately when reproducing a build on another machine; never publish `private-key.pem`. Only the public key is exported. Bit-for-bit equality between two full builds has not been verified.
+Local builds reuse the signing key in `.keys/`. Copy it separately when building on another machine; never publish `private-key.pem`. Only the public key is exported.
 
 ## Checks
 
@@ -225,12 +184,10 @@ The APK signing key is generated in `.keys/` and reused across builds. Transfer 
 docker compose run --rm --entrypoint python3 builder -m unittest discover -s /inputs/tests
 ```
 
-On Windows, use `.\build.ps1 configure`, then the same `docker compose run` command.
-
-Test the PowerShell launcher without a Docker daemon:
+On Windows, use `.\build.ps1 configure`. Launcher checks run without Docker:
 
 ```powershell
 .\tests\test_build_windows.ps1
 ```
 
-[test-windows.yml](.github/workflows/test-windows.yml) runs launcher checks in Windows PowerShell 5.1 and PowerShell 7.
+[test-windows.yml](.github/workflows/test-windows.yml) runs these checks in Windows PowerShell 5.1 and PowerShell 7.
