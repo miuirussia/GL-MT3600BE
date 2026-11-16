@@ -249,10 +249,15 @@ def ensure_keys():
             destination.symlink_to(KEYS / name)
 
 
+def config_text(name):
+    return ''.join(path.read_text().rstrip('\n') + '\n'
+                   for path in sorted((INPUT / 'configs' / name).glob('*.config')))
+
+
 def requested_config():
     settings = {}
     for name in ('device', 'packages', 'custom'):
-        for line in (INPUT / f'configs/{name}.config').read_text().splitlines():
+        for line in config_text(name).splitlines():
             if re.fullmatch(r'CONFIG_[A-Za-z0-9_\-]+=.+', line):
                 key, value = line.split('=', 1)
                 settings[key] = value
@@ -267,10 +272,9 @@ def configure(lock):
     if settings.get(device) != 'y':
         fail('The GL-MT3600BE device selection must remain enabled.')
     # OpenWrt merges env/kernel-config after the target's kernel defaults.
-    kernel_config = INPUT / 'configs/kernel.config'
     kernel_override = SOURCE / 'env/kernel-config'
     kernel_override.parent.mkdir(exist_ok=True)
-    kernel_override.write_text(kernel_config.read_text() if kernel_config.exists() else '')
+    kernel_override.write_text(config_text('kernel'))
     (SOURCE / '.config').write_text(''.join(
         f'# {k} is not set\n' if v == 'n' else f'{k}={v}\n' for k, v in settings.items()))
     run('make', 'defconfig')
@@ -384,7 +388,7 @@ def main():
         if args.command == 'menuconfig':
             run('make', 'menuconfig')
             (ARTIFACTS / 'menuconfig.config').write_text(run('./scripts/diffconfig.sh', capture=True) + '\n')
-            print('Save on host: cp artifacts/menuconfig.config configs/custom.config')
+            print('Save on host: cp artifacts/menuconfig.config configs/custom/menuconfig.config')
         elif args.command == 'make':
             run('make', *args.make_args)
         else:

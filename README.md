@@ -49,10 +49,10 @@ Pass these commands to `./build.sh` or `.\build.ps1`:
 After `menuconfig`, save your selection on the host:
 
 ```sh
-cp artifacts/menuconfig.config configs/custom.config
+cp artifacts/menuconfig.config configs/custom/menuconfig.config
 ```
 
-In PowerShell, use `Copy-Item artifacts/menuconfig.config configs/custom.config`.
+In PowerShell, use `Copy-Item artifacts/menuconfig.config configs/custom/menuconfig.config`.
 
 ### Output and storage
 
@@ -85,7 +85,18 @@ Actions restores the latest cache for the same inputs, falling back to one with 
 
 ## Packages and configuration
 
-Add package selections to `configs/packages.config`:
+Configuration is split into topic files in four sections:
+
+| Section | Contents |
+| --- | --- |
+| `configs/device/*.config` | Target, image, build settings, and OpenWrt kernel options |
+| `configs/packages/*.config` | Package selections and prebuilt APK dependencies |
+| `configs/custom/*.config` | Local OpenWrt overrides and saved menuconfig selections |
+| `configs/kernel/*.config` | Linux kernel overrides |
+
+OpenWrt settings are loaded in section order: `device`, `packages`, then `custom`. Within each section, `*.config` files directly in the directory are loaded in filename order; the last value for an option wins. Linux kernel fragments are merged separately in filename order. Add new topic files as needed.
+
+Add package selections to any `configs/packages/*.config` file, for example `configs/packages/tools.config`:
 
 ```config
 CONFIG_PACKAGE_htop=y
@@ -93,9 +104,9 @@ CONFIG_PACKAGE_curl=y
 CONFIG_PACKAGE_tcpdump=m
 ```
 
-Use `=y` to include a package in the firmware or `=m` to build a separate APK. Put other Kconfig options in `configs/custom.config`; these are applied last. Changes under `configs/` do not require a source reset.
+Use `=y` to include a package in the firmware or `=m` to build a separate APK. Put other Kconfig options in `configs/custom/*.config`; these are applied last. Changes under `configs/` do not require a source reset.
 
-Use `configs/kernel.config` for Linux kernel overrides (`CONFIG_*`, without the OpenWrt `KERNEL_` prefix). It enables built-in conntrack events and labels, netfilter egress, traffic-control actions, XFRM, TLS offload, FS-Cache, 16-port UART limits, and `/proc/config.gz`. The builder copies it to OpenWrt's `env/kernel-config`, which is merged after the target defaults; OpenWrt `CONFIG_KERNEL_*` settings, package selections, and Linux dependencies still apply. The overrides are exported as `kernel.config` with the firmware. `010-netfs-kconfig-prompt.patch` makes the netfs core directly selectable for FS-Cache.
+Use `configs/kernel/*.config` for Linux kernel overrides (`CONFIG_*`, without the OpenWrt `KERNEL_` prefix). It enables built-in conntrack events and labels, netfilter egress, traffic-control actions, XFRM, TLS offload, FS-Cache, 16-port UART limits, and `/proc/config.gz`. The builder merges these files into OpenWrt's `env/kernel-config`, which is merged after the target defaults; OpenWrt `CONFIG_KERNEL_*` settings, package selections, and Linux dependencies still apply. The overrides are exported as `kernel.config` with the firmware. `010-netfs-kconfig-prompt.patch` makes the netfs core directly selectable for FS-Cache.
 
 | Directory | Contents |
 | --- | --- |
@@ -126,7 +137,9 @@ Downloads, ccache, signing keys, and exported artifacts are preserved. Save any 
 
 ## Prebuilt APKs
 
-The firmware includes [luci-theme-outline 1.3.1](https://github.com/tickcount/luci-theme-outline/releases/tag/v1.3.1) from its OpenWrt 25.12 APK. `apk/luci-theme-outline-1.3.1-r20261102.apk.txt` pins the release URL and SHA-256; its runtime dependencies are selected in `configs/packages.config`. The package's own first-boot script registers and activates Outline. Appearance settings are available under **System → Outline Theme**; Bootstrap remains installed as an alternative. To update the theme in future builds, update the descriptor's filename, URL, and checksum, then run `reset-sources` and rebuild.
+The firmware includes [luci-theme-outline 1.4.1](https://github.com/tickcount/luci-theme-outline/releases/tag/v1.4.1) from its OpenWrt 25.12 APK. `apk/luci-theme-outline-1.4.1-r20261116.apk.txt` pins the release URL and SHA-256; its runtime dependencies are selected in `configs/packages/outline.config`. The package's own first-boot script registers and activates Outline. Appearance settings are available under **System → System → Language and Style**; Bootstrap remains installed as an alternative. To update the theme in future builds, update the descriptor's filename, URL, and checksum, then run `reset-sources` and rebuild.
+
+The firmware also includes [Forkop 2.0.18](https://github.com/miuirussia/forkop/releases/tag/2.0.18), its LuCI app and Russian translation, and [sing-box-forkop 1.14.4-r5](https://github.com/miuirussia/sing-box-forkop/releases/tag/v1.14.4-r5) (`base`, `aarch64_cortex-a53`). Their descriptors in `apk/` pin the release URLs and SHA-256 checksums; runtime dependencies are selected in `configs/packages/forkop.config`. These are the latest releases as of 2026-11-16. To update them, change the descriptor filenames, URLs, and checksums, then run `reset-sources` and rebuild. Forkop settings are available under **Services → Forkop**.
 
 Place OpenWrt `.apk` files in `apk/`. All packages in this directory are included in the firmware without Kconfig entries:
 
@@ -145,7 +158,7 @@ SKIP
 
 Downloaded during source preparation as `example.apk`. A checksum mismatch or an existing `apk/example.apk` stops the build.
 
-Packages must match OpenWrt 25.12 and `aarch64_cortex-a53` or `noarch`. Add dependencies to `configs/packages.config` or supply their APKs in the same directory. Missing dependencies fail the build.
+Packages must match OpenWrt 25.12 and `aarch64_cortex-a53` or `noarch`. Add dependencies to `configs/packages/*.config` or supply their APKs in the same directory. Missing dependencies fail the build.
 
 Use regular files with simple filenames; subdirectories and symlinks are not supported. The builder re-signs copies with its build key and exports them under `artifacts/25.12.6/apk/`.
 
@@ -163,7 +176,7 @@ Add a repository to the `feeds` array in `openwrt.lock.json`:
 }
 ```
 
-Replace the URL and SHA with actual values; the lock file requires full commit SHAs. Use feeds compatible with OpenWrt 25.12 and its APK package manager, then select packages in `configs/packages.config`. Pin `PKG_SOURCE_VERSION` and source archive hashes in local recipes.
+Replace the URL and SHA with actual values; the lock file requires full commit SHAs. Use feeds compatible with OpenWrt 25.12 and its APK package manager, then select packages in `configs/packages/*.config`. Pin `PKG_SOURCE_VERSION` and source archive hashes in local recipes.
 
 ## uci-defaults
 
@@ -193,7 +206,7 @@ OpenWrt removes each script after it succeeds. Failed scripts may run again, so 
 
 The kernel uses the defaults from the locked OpenWrt sources. `CONFIG_ALL_KMODS=n` keeps the build limited to selected kmod packages. Package-dependent kernel options are resolved by OpenWrt Kconfig; the official vermagic override remains enabled.
 
-`configs/device.config` disables `CONFIG_KERNEL_KALLSYMS`, matching the [official release configuration](https://downloads.openwrt.org/releases/25.12.6/targets/mediatek/filogic/config.buildinfo). Enabling it changes `struct module` and prevents official kmods from loading with a `.gnu.linkonce.this_module section size must match` error, even when the forced ABI hash matches. Firmware built before this setting was added must be rebuilt and flashed; reinstalling packages cannot change the running kernel's module layout.
+`configs/device/kernel.config` disables `CONFIG_KERNEL_KALLSYMS`, matching the [official release configuration](https://downloads.openwrt.org/releases/25.12.6/targets/mediatek/filogic/config.buildinfo). Enabling it changes `struct module` and prevents official kmods from loading with a `.gnu.linkonce.this_module section size must match` error, even when the forced ABI hash matches. Firmware built before this setting was added must be rebuilt and flashed; reinstalling packages cannot change the running kernel's module layout.
 
 A matching hash does not guarantee kmod compatibility after changing the kernel configuration or sources. The patch does not disable Linux module loading checks. Build kmods alongside the firmware when modifying the kernel.
 
