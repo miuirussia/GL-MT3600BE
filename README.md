@@ -109,7 +109,7 @@ Two network workarounds are included:
 | Package | Version | LuCI location |
 | --- | --- | --- |
 | [Outline](https://github.com/tickcount/luci-theme-outline/releases/tag/v1.4.1) | 1.4.1 | System → System → Language and Style |
-| [Forkop](https://github.com/miuirussia/forkop/releases/tag/2.0.18), LuCI app and Russian translation | 2.0.18 | Services → Forkop |
+| [Forkop](https://github.com/miuirussia/forkop/releases/tag/2.0.19), LuCI app and Russian translation | 2.0.19 | Services → Forkop |
 | [sing-box-forkop](https://github.com/miuirussia/sing-box-forkop/releases/tag/v1.14.4-r5) | 1.14.4-r5, `base` | — |
 | [luci-app-fancontrol](https://github.com/zkcaryq/luci-app-fancontrol) | 1.1.0-r2 | System → Fan Control |
 | [luci-app-temp-status](https://github.com/gSpotx2f/luci-app-temp-status), Russian translation | 0.8.1-r1 | Status page |
