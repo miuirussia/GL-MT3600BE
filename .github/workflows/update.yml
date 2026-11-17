@@ -1,0 +1,70 @@
+name: Update APK packages
+
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+  push:
+    paths:
+      - update.sh
+      - scripts/update-apk.py
+      - tests/test_update_apk.py
+      - .github/workflows/update.yml
+  pull_request:
+    paths:
+      - update.sh
+      - scripts/update-apk.py
+      - tests/test_update_apk.py
+      - .github/workflows/update.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Test updater
+        run: |
+          bash -n update.sh
+          python3 -m unittest discover -s tests -p test_update_apk.py
+
+  update:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Update APK descriptors
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./update.sh
+      - name: Commit updates and build firmware
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          UPDATE_BRANCH: ${{ github.ref_name }}
+        run: |
+          git add -- apk/
+          if git diff --cached --quiet; then
+            echo 'All APK packages are up to date.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore: update APK packages'
+          git push origin "HEAD:refs/heads/$UPDATE_BRANCH"
+          # Pushes with GITHUB_TOKEN do not trigger the build workflow.
+          gh workflow run build.yml --ref "$UPDATE_BRANCH"
+          git show --stat --oneline HEAD >> "$GITHUB_STEP_SUMMARY"

@@ -127,7 +127,19 @@ Replace `SKIP` with the checksum to verify the download. The builder downloads t
 
 All APKs in this directory enter the firmware without Kconfig entries. They must match OpenWrt 25.12 and `aarch64_cortex-a53` or `noarch`. Select dependencies in `configs/packages/` or supply their APKs; missing dependencies fail the build. Use regular files directly in `apk/`, with simple filenames. Copies are re-signed with the build key and exported under `artifacts/25.12.6/apk/`.
 
-To update a package, change its descriptor filename, URL, and checksum, then reset and rebuild. Included descriptors pin SHA-256 checksums. Fancontrol uses a `continuous` release asset, which upstream may replace or remove; temp-status URLs are pinned to a commit.
+Update all download descriptors with Python 3 (no Docker or additional Python packages required):
+
+```sh
+./update.sh                 # Update apk/ filenames, URLs, and SHA-256 checksums
+./update.sh --check         # Check without writing: exit 0 = current, 1 = updates, 2 = error
+./update.sh /path/to/apk    # Use another descriptor directory
+```
+
+The updater discovers sources from existing URLs, without a separate package list. It supports GitHub release assets and `raw.githubusercontent.com` files. Versioned release tags follow the latest stable release; named rolling tags such as `continuous` stay on that release and are checked for replaced assets. Raw files follow the default branch within the same directory (for example, `25.12`) and are pinned to a commit; unchanged packages retain their existing pin.
+
+Package names, architectures, and variants (such as sing-box `base`) are preserved. Missing or ambiguous matches, failed downloads, and filename conflicts stop the update before any descriptors are written. Local `.apk` binaries are left alone. New GitHub descriptors using the same filename conventions are picked up automatically. Other sources can be updated manually. Set `GH_TOKEN` or `GITHUB_TOKEN` to raise the GitHub API rate limit.
+
+After updating locally, reset and rebuild. Included descriptors pin SHA-256 checksums. Fancontrol uses a `continuous` release asset, which upstream may replace or remove; temp-status URLs are pinned to a commit.
 
 ### Third-party feeds
 
@@ -158,6 +170,8 @@ OpenWrt removes scripts after they succeed and retries failed scripts. Make them
 The hash alone does not guarantee compatibility after kernel changes; Linux module loading checks remain active. Build kmods with the firmware when modifying the kernel. To restore native hash calculation, set `kernel.vermagic_mode` to `"native"` in the lock file, then reset and rebuild.
 
 ## GitHub Actions
+
+[update.yml](.github/workflows/update.yml) checks APK updates daily at 03:23 UTC (06:23 Moscow) and supports manual runs. It commits changed descriptors to the selected branch as `github-actions[bot]`, then explicitly starts `build.yml` for that branch. No changes means no commit or build. It uses the built-in `GITHUB_TOKEN` with contents and actions write permissions; no additional secret is needed. Branch rules must allow the bot to push. Updater tests also run on pushes and pull requests that change its code or workflow.
 
 [build.yml](.github/workflows/build.yml) builds on Ubuntu 24.04 on pushes to `main`, `v*` tags, or manual runs. It uses the same builder and inputs as Docker.
 
