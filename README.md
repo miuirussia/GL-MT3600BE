@@ -127,17 +127,20 @@ Replace `SKIP` with the checksum to verify the download. The builder downloads t
 
 All APKs in this directory enter the firmware without Kconfig entries. They must match OpenWrt 25.12 and `aarch64_cortex-a53` or `noarch`. Select dependencies in `configs/packages/` or supply their APKs; missing dependencies fail the build. Use regular files directly in `apk/`, with simple filenames. Copies are re-signed with the build key and exported under `artifacts/25.12.6/apk/`.
 
-Update all download descriptors with Python 3 (no Docker or additional Python packages required):
+Update all download descriptors with Python 3 and either apk-tools 3 or Docker (no additional Python packages required). The updater uses `apk adbdump` to read dependencies; when no native `apk` is available, it runs a pinned Alpine image in Docker. Set `ROUTERFW_APK` to use a specific native APK executable.
 
 ```sh
 ./update.sh                 # Update apk/ filenames, URLs, and SHA-256 checksums
 ./update.sh --check         # Check without writing: exit 0 = current, 1 = updates, 2 = error
 ./update.sh /path/to/apk    # Use another descriptor directory
+./update.sh --configs /path/to/configs  # Check against another build configuration
 ```
 
 The updater discovers sources from existing URLs, without a separate package list. It supports GitHub release assets and `raw.githubusercontent.com` files. Versioned release tags follow the latest stable release; named rolling tags such as `continuous` stay on that release and are checked for replaced assets. Raw files follow the default branch within the same directory (for example, `25.12`) and are pinned to a commit; unchanged packages retain their existing pin.
 
-Package names, architectures, and variants (such as sing-box `base`) are preserved. Missing or ambiguous matches, failed downloads, and filename conflicts stop the update before any descriptors are written. Local `.apk` binaries are left alone. New GitHub descriptors using the same filename conventions are picked up automatically. Other sources can be updated manually. Set `GH_TOKEN` or `GITHUB_TOKEN` to raise the GitHub API rate limit.
+Package names, architectures, and variants (such as sing-box `base`) are preserved. Every downloaded APK, including unchanged versions, is checked against the build configuration before any descriptors are written. Dependencies must already be selected with `CONFIG_PACKAGE_...=y` or `=m`, be a base package (`base-files`, `libc`, `kernel`), or be supplied by another local APK. The check respects config fragment order and disabled options and reads local APK `provides`. When a dependency needs a virtual provider, the updater reads `provides` from the official package indexes for the release, target, architecture, and feeds in `openwrt.lock.json`; only packages already selected in the config can provide it. The architecture comes from the checksum-pinned `profiles.json`. Providers available only in custom feeds must be supplied as local APKs. Missing dependencies stop the update with exit code 2 and list the requiring packages and dependency constraints. Configuration files are never updated automatically. Version compatibility and transitive dependencies are still resolved by APK during the firmware build.
+
+Missing or ambiguous matches, failed downloads, invalid APK metadata, and filename conflicts also stop the update before any descriptors are written. Local `.apk` binaries are inspected for dependencies and remain unchanged. New GitHub descriptors using the same filename conventions are picked up automatically. Other sources can be updated manually. Set `GH_TOKEN` or `GITHUB_TOKEN` to raise the GitHub API rate limit.
 
 After updating locally, reset and rebuild. Included descriptors pin SHA-256 checksums. Fancontrol uses a `continuous` release asset, which upstream may replace or remove; temp-status URLs are pinned to a commit.
 
@@ -171,7 +174,7 @@ The hash alone does not guarantee compatibility after kernel changes; Linux modu
 
 ## GitHub Actions
 
-[update.yml](.github/workflows/update.yml) checks APK updates daily at 03:23 UTC (06:23 Moscow) and supports manual runs. It commits changed descriptors to the selected branch as `github-actions[bot]`, then explicitly starts `build.yml` for that branch. No changes means no commit or build. It uses the built-in `GITHUB_TOKEN` with contents and actions write permissions; no additional secret is needed. Branch rules must allow the bot to push. Updater tests also run on pushes and pull requests that change its code or workflow.
+[update.yml](.github/workflows/update.yml) checks APK updates daily at 03:23 UTC (06:23 Moscow) and supports manual runs. It validates dependencies before committing changed descriptors to the selected branch as `github-actions[bot]`, then explicitly starts `build.yml` for that branch. A missing dependency fails the job without a commit or build. No changes means no commit or build. It uses the built-in `GITHUB_TOKEN` with contents and actions write permissions; no additional secret is needed. Branch rules must allow the bot to push. Updater tests also run on pushes and pull requests that change its code or workflow.
 
 [build.yml](.github/workflows/build.yml) builds on Ubuntu 24.04 on pushes to `main`, `v*` tags, or manual runs. It uses the same builder and inputs as Docker.
 

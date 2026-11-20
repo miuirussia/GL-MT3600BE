@@ -1,4 +1,4 @@
-"""APK update discovery, checksum pinning and safe descriptor replacement."""
+"""APK discovery, dependency checks, checksum pinning and safe descriptor replacement."""
 import hashlib
 import importlib.util
 import io
@@ -95,10 +95,198 @@ class Discovery(unittest.TestCase):
     def test_checksum_streams_package_without_sending_api_token(self):
         data = b'apk payload' * 200000
         with (patch.dict(os.environ, {'GH_TOKEN': 'test-token'}),
-              patch.object(updater.urllib.request, 'urlopen', return_value=io.BytesIO(data)) as download):
-            self.assertEqual(updater.checksum('https://example.com/example.apk'),
+              patch.object(updater.urllib.request, 'urlopen', return_value=io.BytesIO(data)) as download,
+              tempfile.TemporaryFile() as package):
+            self.assertEqual(updater.checksum('https://example.com/example.apk', package),
                              hashlib.sha256(data).hexdigest())
+            package.seek(0)
+            self.assertEqual(package.read(), data)
         self.assertIsNone(download.call_args.args[0].get_header('Authorization'))
+
+
+class Dependencies(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.configs = Path(temporary.name)
+        (self.configs / 'packages').mkdir()
+        (self.configs / 'packages/runtime.config').write_text(
+            'CONFIG_PACKAGE_ucode=y\nCONFIG_PACKAGE_ip-tiny=y\n'
+            'CONFIG_PACKAGE_nftables-json=m\nCONFIG_PACKAGE_unused=n\n')
+        self.repositories = patch.object(updater, 'repository_packages', return_value=[])
+        self.repository_packages = self.repositories.start()
+        self.addCleanup(self.repositories.stop)
+
+    def test_checks_configured_packages_variants_base_packages_and_local_providers(self):
+        self.repository_packages.return_value = [
+            {'name': 'ip-tiny', 'provides': ['ip=1']},
+            {'name': 'nftables-json', 'provides': ['nftables=1']},
+        ]
+        updater.check_dependencies([
+            {'name': 'app', 'depends': ['libc', 'kernel', 'base-files', 'ucode>=1',
+                                       'ip', 'nftables', 'addon>=2', 'virtual-addon=2', '!conflict']},
+            {'name': 'addon', 'version': '2', 'provides': ['virtual-addon=2']},
+        ], self.configs)
+
+    def test_discovers_arbitrary_virtual_dependencies_from_configured_packages_only(self):
+        self.repository_packages.return_value = [
+            {'name': 'ucode', 'provides': ['new-virtual-package=3']},
+            {'name': 'not-selected', 'provides': ['missing-virtual-package=2']},
+        ]
+        updater.check_dependencies([
+            {'name': 'app', 'depends': ['new-virtual-package>=2']},
+        ], self.configs)
+        with self.assertRaisesRegex(RuntimeError, 'app: missing-virtual-package'):
+            updater.check_dependencies([
+                {'name': 'app', 'depends': ['missing-virtual-package']},
+            ], self.configs)
+
+    def test_exact_and_local_dependencies_do_not_fetch_repository_indexes(self):
+        updater.check_dependencies([{'name': 'app', 'depends': ['libc', 'ucode']}], self.configs)
+        self.repository_packages.assert_not_called()
+
+    def test_configured_abi_libraries_supply_real_names_and_virtual_dependencies(self):
+        (self.configs / 'packages/libraries.config').write_text(
+            'CONFIG_PACKAGE_libubus=y\nCONFIG_PACKAGE_libsqlite3=m\n')
+        self.repository_packages.return_value = [
+            {'name': 'libubus20251202', 'provides': ['libubus', 'libubus-any']},
+            {'name': 'libsqlite3-0', 'provides': ['libsqlite3', 'libsqlite3-any']},
+        ]
+        updater.check_dependencies([
+            {'name': 'app', 'depends': ['libubus20251202>=1', 'libubus-any',
+                                       'libsqlite3-0', 'libsqlite3-any']},
+        ], self.configs)
+
+    def test_disabled_abi_library_does_not_supply_dependencies(self):
+        (self.configs / 'packages/libraries.config').write_text('CONFIG_PACKAGE_libubus=n\n')
+        self.repository_packages.return_value = [
+            {'name': 'libubus20251202', 'provides': ['libubus', 'libubus-any']},
+        ]
+        with self.assertRaisesRegex(RuntimeError, 'app: libubus-any\napp: libubus20251202'):
+            updater.check_dependencies([
+                {'name': 'app', 'depends': ['libubus20251202', 'libubus-any']},
+            ], self.configs)
+
+    def test_shared_provides_do_not_select_other_package_variants(self):
+        self.repository_packages.return_value = [
+            {'name': 'ucode-alternative', 'provides': ['ucode=1', 'alternative-only']},
+            {'name': 'ip-full', 'provides': ['ip=1', 'full-only']},
+        ]
+        with self.assertRaisesRegex(RuntimeError, 'app: alternative-only\napp: full-only'):
+            updater.check_dependencies([
+                {'name': 'app', 'depends': ['alternative-only', 'full-only']},
+            ], self.configs)
+
+    def test_missing_and_disabled_dependencies_report_package_and_version_constraint(self):
+        with self.assertRaisesRegex(RuntimeError, 'app: new-library>=2\napp: unused'):
+            updater.check_dependencies([
+                {'name': 'app', 'depends': ['unused', 'new-library>=2']},
+            ], self.configs)
+
+    def test_later_config_fragments_override_earlier_selections(self):
+        (self.configs / 'custom').mkdir()
+        for override in ('CONFIG_PACKAGE_ucode=n\n', '# CONFIG_PACKAGE_ucode is not set\n'):
+            with self.subTest(override=override):
+                (self.configs / 'custom/override.config').write_text(override)
+                with self.assertRaisesRegex(RuntimeError, 'app: ucode'):
+                    updater.check_dependencies([{'name': 'app', 'depends': ['ucode']}], self.configs)
+
+    def test_missing_config_directory_is_an_error(self):
+        with self.assertRaisesRegex(RuntimeError, 'Configuration directory does not exist'):
+            updater.check_dependencies([{'name': 'app'}], self.configs / 'missing')
+
+    def test_reads_dependency_metadata_without_executing_package_scripts(self):
+        info = {'name': 'app', 'version': '2', 'depends': ['ucode'], 'provides': ['virtual=2']}
+        with (tempfile.TemporaryFile() as package,
+              patch.object(updater, 'apk', return_value=json.dumps({'info': info})) as apk):
+            package.write(b'APK data')
+            self.assertEqual(updater.package_info(package), info)
+            self.assertEqual(package.tell(), 0)
+            apk.assert_called_once_with('adbdump', '--format', 'json', '/dev/stdin', stdin=package)
+
+    def test_corrupt_apk_and_invalid_metadata_fail(self):
+        for info in (None, [], {}, {'name': 'app', 'depends': 'library'},
+                     {'name': 'app', 'provides': [None]}):
+            with (self.subTest(info=info), tempfile.TemporaryFile() as package,
+                  patch.object(updater, 'apk', return_value=json.dumps({'info': info})),
+                  self.assertRaisesRegex(RuntimeError, 'metadata')):
+                updater.package_info(package)
+
+    def test_apk_command_uses_native_tool_or_pinned_docker_image(self):
+        for native in (None, '/usr/bin/apk'):
+            with (self.subTest(native=native), patch.dict(os.environ, {}, clear=True),
+                  patch.object(updater.shutil, 'which', side_effect=[native, '/usr/bin/docker']
+                               if native is None else [native]),
+                  patch.object(updater.subprocess, 'run', return_value=Mock(
+                      returncode=0, stdout='{}')) as run):
+                self.assertEqual(updater.apk('adbdump'), '{}')
+                expected = ([native] if native else
+                            ['docker', 'run', '--rm', '-i', updater.APK_IMAGE, 'apk'])
+                self.assertEqual(run.call_args.args[0], [*expected, 'adbdump'])
+
+    def test_missing_tool_and_failed_inspection_are_errors(self):
+        with (patch.dict(os.environ, {}, clear=True),
+              patch.object(updater.shutil, 'which', return_value=None),
+              self.assertRaisesRegex(RuntimeError, 'require apk-tools 3')):
+            updater.apk('adbdump')
+        with (patch.dict(os.environ, {'ROUTERFW_APK': '/test/apk'}),
+              patch.object(updater.subprocess, 'run', return_value=Mock(
+                  returncode=1, stderr='corrupt package')),
+              self.assertRaisesRegex(RuntimeError, 'corrupt package')):
+            updater.apk('adbdump')
+
+
+class RepositoryMetadata(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.profile = json.dumps({'version_number': '25.12.6', 'target': 'mediatek/filogic',
+                                   'arch_packages': 'aarch64_cortex-a53'}).encode()
+        self.reference = 'https://downloads.openwrt.org/releases/25.12.6/targets/mediatek/filogic/profiles.json'
+        self.lock = {'release': '25.12.6', 'target': 'mediatek/filogic',
+                     'reference': {'url': self.reference,
+                                   'sha256': hashlib.sha256(self.profile).hexdigest()},
+                     'feeds': [{'name': 'luci'}, {'name': 'packages'}]}
+        self.write_lock()
+        root = patch.object(updater, 'ROOT', self.root)
+        root.start()
+        self.addCleanup(root.stop)
+
+    def write_lock(self):
+        (self.root / 'openwrt.lock.json').write_text(json.dumps(self.lock))
+
+    def test_reads_providers_from_locked_target_architecture_and_feed_indexes(self):
+        info = {'name': 'custom-variant', 'provides': ['custom-virtual=2']}
+        def download(url, package):
+            data = self.profile if url == self.reference else b'index data'
+            package.write(data)
+            return hashlib.sha256(data).hexdigest()
+        with (patch.object(updater, 'checksum', side_effect=download) as fetch,
+              patch.object(updater, 'apk', return_value=json.dumps({'packages': [info]}))):
+            self.assertEqual(list(updater.repository_packages()), [info] * 4)
+        release = 'https://downloads.openwrt.org/releases/25.12.6/'
+        self.assertEqual([call.args[0] for call in fetch.call_args_list], [
+            self.reference,
+            release + 'targets/mediatek/filogic/packages/packages.adb',
+            *(release + f'packages/aarch64_cortex-a53/{feed}/packages.adb'
+              for feed in ('base', 'luci', 'packages')),
+        ])
+
+    def test_wrong_profile_checksum_or_release_stops_inspection(self):
+        for digest, message in [('0' * 64, 'checksum mismatch'),
+                                (hashlib.sha256(self.profile).hexdigest(), 'does not match')]:
+            self.lock['release'] = 'different-release'
+            self.write_lock()
+            def download(url, package):
+                package.write(self.profile)
+                return digest
+            with (self.subTest(message=message),
+                  patch.object(updater, 'checksum', side_effect=download),
+                  patch.object(updater, 'apk') as apk,
+                  self.assertRaisesRegex(RuntimeError, message)):
+                list(updater.repository_packages())
+            apk.assert_not_called()
 
 
 class Updates(unittest.TestCase):
@@ -118,6 +306,19 @@ class Updates(unittest.TestCase):
         self.hasher = patch.object(updater, 'checksum', return_value=self.digest)
         self.hasher.start()
         self.addCleanup(self.hasher.stop)
+        self.configs = self.directory / 'configs'
+        (self.configs / 'packages').mkdir(parents=True)
+        (self.configs / 'packages/runtime.config').write_text('CONFIG_PACKAGE_library=y\n')
+        self.root = patch.object(updater, 'ROOT', self.directory)
+        self.root.start()
+        self.addCleanup(self.root.stop)
+        self.metadata = patch.object(updater, 'package_info', return_value={
+            'name': 'example', 'version': '2.0', 'depends': ['libc', 'library']})
+        self.package_info = self.metadata.start()
+        self.addCleanup(self.metadata.stop)
+        self.repositories = patch.object(updater, 'repository_packages', return_value=[])
+        self.repositories.start()
+        self.addCleanup(self.repositories.stop)
 
     def test_renames_descriptor_updates_url_and_pins_checksum(self):
         (self.directory / '.gitkeep').touch()
@@ -131,6 +332,53 @@ class Updates(unittest.TestCase):
         self.assertTrue(updater.update(self.directory, check=True))
         self.assertEqual(self.descriptor.read_text(), self.original)
         self.assertFalse((self.directory / 'example-2.0.apk.txt').exists())
+
+    def test_new_dependency_stops_update_without_changing_descriptors_or_configs(self):
+        other = self.directory / 'other-1.0.apk.txt'
+        other.write_text(self.original)
+        originals = {path: path.read_bytes() for path in self.directory.rglob('*') if path.is_file()}
+        for check in (False, True):
+            with (self.subTest(check=check),
+                  patch.object(updater, 'resolve', side_effect=[
+                      ('example-2.0.apk', self.new_url), ('other-2.0.apk', self.new_url)]),
+                  patch.object(updater, 'package_info', side_effect=[
+                      {'name': 'example', 'depends': ['library']},
+                      {'name': 'other', 'depends': ['new-library>=2']}]),
+                  self.assertRaisesRegex(RuntimeError, 'other: new-library>=2')):
+                updater.update(self.directory, check=check)
+            self.assertEqual({path: path.read_bytes() for path in self.directory.rglob('*')
+                              if path.is_file()}, originals)
+
+    def test_unchanged_package_still_checks_dependencies(self):
+        self.descriptor.write_text(self.url + '\n' + self.digest + '\n')
+        with (patch.object(updater, 'resolve', return_value=('example-1.0.apk', self.url)),
+              patch.object(updater, 'package_info', return_value={
+                  'name': 'example', 'depends': ['missing-library']}),
+              self.assertRaisesRegex(RuntimeError, 'missing-library')):
+            updater.update(self.directory)
+
+    def test_repository_download_failure_does_not_change_descriptors(self):
+        with (patch.object(updater, 'package_info', return_value={
+                  'name': 'example', 'depends': ['virtual-library']}),
+              patch.object(updater, 'repository_packages', side_effect=urllib.error.URLError('offline')),
+              self.assertRaises(urllib.error.URLError)):
+            updater.update(self.directory)
+        self.assertEqual(self.descriptor.read_text(), self.original)
+        self.assertFalse((self.directory / 'example-2.0.apk.txt').exists())
+
+    def test_local_binary_can_satisfy_dependencies_and_is_not_modified(self):
+        binary = self.directory / 'addon.apk'
+        binary.write_bytes(b'local APK')
+        with patch.object(updater, 'package_info', side_effect=[
+                {'name': 'example', 'depends': ['virtual-addon']},
+                {'name': 'addon', 'depends': ['library'], 'provides': ['virtual-addon=1']}]):
+            self.assertTrue(updater.update(self.directory))
+        self.assertEqual(binary.read_bytes(), b'local APK')
+
+    def test_explicit_config_directory_is_used(self):
+        self.assertTrue(updater.update(self.directory, configs=self.configs))
+        with self.assertRaisesRegex(RuntimeError, 'Configuration directory does not exist'):
+            updater.update(self.directory, configs=self.configs / 'missing')
 
     def test_up_to_date_is_idempotent(self):
         self.descriptor.write_text(self.url + '\n' + self.digest + '\n')
@@ -186,7 +434,12 @@ class Updates(unittest.TestCase):
             with (patch.object(updater, 'update', return_value=changed) as update,
                   patch.object(updater.sys, 'argv', ['update-apk.py', '--check', str(self.directory)])):
                 self.assertEqual(updater.main(), expected)
-                update.assert_called_once_with(self.directory, check=True)
+                update.assert_called_once_with(self.directory, check=True, configs=None)
+
+    def test_dependency_error_exit_code(self):
+        with (patch.object(updater, 'update', side_effect=RuntimeError('missing dependency')),
+              patch.object(updater.sys, 'argv', ['update-apk.py', '--check', str(self.directory)])):
+            self.assertEqual(updater.main(), 2)
 
     def test_launcher_works_outside_repository_and_returns_error_status(self):
         self.descriptor.write_text('https://example.com/example.apk\nSKIP\n')
