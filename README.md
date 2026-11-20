@@ -99,10 +99,10 @@ This preserves downloads, ccache, keys, and exported artifacts. Save source edit
 
 Patches apply alphabetically. OpenWrt and feed patches use `a/...` and `b/...` paths relative to the respective repository root. Kernel patches follow the upstream series during `target/linux/prepare`.
 
-Two network workarounds are included:
-
 - [110-mt76-mt7996-always-apply-txd.patch](patches/openwrt/110-mt76-mt7996-always-apply-txd.patch) addresses slow IPv4 NAT downloads over Wi-Fi ([mt76 #1043](https://github.com/openwrt/mt76/issues/1043#issuecomment-4414905981)).
-- [120-gl-mt3600be-disable-broken-eee.patch](patches/openwrt/120-gl-mt3600be-disable-broken-eee.patch) disables 100/1000BASE-T EEE advertisement on the external RTL8221B PHY to address packet loss and slow Ethernet transmission ([OpenWrt #20967](https://github.com/openwrt/openwrt/issues/20967), [PR #25996](https://github.com/openwrt/openwrt/pull/25996)). Hardware validation on GL-MT3600BE is still needed.
+- [120-gl-mt3600be-disable-broken-eee.patch](patches/openwrt/120-gl-mt3600be-disable-broken-eee.patch) disables 100/1000BASE-T EEE advertisement on the external RTL8221B PHY to address packet loss and slow Ethernet transmission. The image includes `ethtool` for link diagnostics. ([OpenWrt #20967](https://github.com/openwrt/openwrt/issues/20967), [PR #25996](https://github.com/openwrt/openwrt/pull/25996))
+- [150-gl-mt3600be-userspace-fan-control.patch](patches/openwrt/150-gl-mt3600be-userspace-fan-control.patch) hands PWM fan control to LuCI. The kernel still throttles the CPU at 117 °C and shuts the router down at 125 °C.
+- New Wi-Fi configurations default to the RU regulatory domain. On upgrade, an unset or `00` country on a built-in radio takes the other band's configured country, if available, or RU. Wi-Fi starts disabled on a fresh install.
 
 ### Prebuilt APKs
 
@@ -111,10 +111,10 @@ Two network workarounds are included:
 | [Outline](https://github.com/tickcount/luci-theme-outline/releases/tag/v1.4.1) | 1.4.1 | System → System → Language and Style |
 | [Forkop](https://github.com/miuirussia/forkop/releases/tag/2.0.19), LuCI app and Russian translation | 2.0.19 | Services → Forkop |
 | [sing-box-forkop](https://github.com/miuirussia/sing-box-forkop/releases/tag/v1.14.4-r5) | 1.14.4-r5, `base` | — |
-| [luci-app-fancontrol](https://github.com/zkcaryq/luci-app-fancontrol) | 1.1.0-r2 | System → Fan Control |
+| [luci-app-h5000m-fancontrol](https://github.com/FAN789/luci-app-h5000m-fancontrol/releases/tag/v2.1.2), Russian translation | 2.1.2-r1 | System → Fan Control |
 | [luci-app-temp-status](https://github.com/gSpotx2f/luci-app-temp-status), Russian translation | 0.8.1-r1 | Status page |
 
-Outline is enabled by default; Bootstrap remains available. Fan control defaults to system control. Runtime dependencies are selected in `configs/packages/{outline,forkop,system}.config`; `system.config` also enables `zram-swap`.
+Outline is enabled by default and Bootstrap remains available. Fan control starts with the balanced curve and uses the separate `h5000m_fancontrol` UCI configuration. Selecting kernel protection only relinquishes PWM control and leaves CPU thermal protection active. Runtime dependencies are selected in `configs/packages/{outline,forkop,system}.config`. The `system.config` fragment also enables `zram-swap`.
 
 To add a package, place its `.apk` in `apk/`, or create `apk/example.apk.txt` with a download URL and SHA-256 on separate lines:
 
@@ -142,7 +142,7 @@ Package names, architectures, and variants (such as sing-box `base`) are preserv
 
 Missing or ambiguous matches, failed downloads, invalid APK metadata, and filename conflicts also stop the update before any descriptors are written. Local `.apk` binaries are inspected for dependencies and remain unchanged. New GitHub descriptors using the same filename conventions are picked up automatically. Other sources can be updated manually. Set `GH_TOKEN` or `GITHUB_TOKEN` to raise the GitHub API rate limit.
 
-After updating locally, reset and rebuild. Included descriptors pin SHA-256 checksums. Fancontrol uses a `continuous` release asset, which upstream may replace or remove; temp-status URLs are pinned to a commit.
+After updating locally, reset and rebuild. Included descriptors pin SHA-256 checksums. Temp-status URLs are pinned to a commit.
 
 ### Third-party feeds
 

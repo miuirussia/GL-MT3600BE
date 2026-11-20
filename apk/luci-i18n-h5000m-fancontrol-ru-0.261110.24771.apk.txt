@@ -1,0 +1,2 @@
+https://github.com/FAN789/luci-app-h5000m-fancontrol/releases/download/v2.1.2/luci-i18n-h5000m-fancontrol-ru-0.261110.24771.apk
+8070d92ae0773e93f8d132937e20dd8c1df04f66e984362b42bf13bdae89b890

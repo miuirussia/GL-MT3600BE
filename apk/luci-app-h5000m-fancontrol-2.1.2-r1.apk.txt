@@ -1,0 +1,2 @@
+https://github.com/FAN789/luci-app-h5000m-fancontrol/releases/download/v2.1.2/luci-app-h5000m-fancontrol-2.1.2-r1.apk
+1e86aa6f41cd8a86151f9c439f799f7c08115696e86789c5576d7492e7bd52dc

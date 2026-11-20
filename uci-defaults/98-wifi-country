@@ -1,0 +1,32 @@
+#!/bin/sh
+
+. /lib/functions.sh
+
+[ -f /etc/config/wireless ] || exit 0
+config_load wireless || exit 1
+
+radios=
+country=
+collect_radio() {
+	local path phy selected
+
+	config_get path "$1" path
+	config_get phy "$1" phy
+	case "$path:$phy" in
+		*11280000.pcie/*|:phy0) ;;
+		*) return 0 ;;
+	esac
+
+	config_get selected "$1" country
+	case "$selected" in
+		''|00) radios="${radios:+$radios }$1" ;;
+		*) country="${country:-$selected}" ;;
+	esac
+}
+config_foreach collect_radio wifi-device
+
+[ -n "$radios" ] || exit 0
+for radio in $radios; do
+	uci set "wireless.$radio.country=${country:-RU}" || exit 1
+done
+uci commit wireless

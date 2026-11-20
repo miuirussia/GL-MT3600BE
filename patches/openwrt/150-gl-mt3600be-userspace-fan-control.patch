@@ -1,0 +1,31 @@
+Subject: [PATCH] mediatek: gl-mt3600be: let userspace control the PWM fan
+
+Drop the three fan cooling maps on this board so the LuCI controller
+can use its own curve. Keep the CPU frequency cooling map and all
+thermal trips, including the critical shutdown.
+
+Adapted from:
+https://github.com/FAN789/luci-app-h5000m-fancontrol/blob/v2.1.2/openwrt-patches/h5000m-userspace-fan-control.patch
+
+diff --git a/target/linux/mediatek/dts/mt7987a-glinet-gl-mt3600be.dts b/target/linux/mediatek/dts/mt7987a-glinet-gl-mt3600be.dts
+index 784e134..2bfa746 100644
+--- a/target/linux/mediatek/dts/mt7987a-glinet-gl-mt3600be.dts
++++ b/target/linux/mediatek/dts/mt7987a-glinet-gl-mt3600be.dts
+@@ -82,7 +82,17 @@
+ 	};
+ };
+ 
++&cpu_thermal {
++	cooling-maps {
++		/delete-node/ cpu-active-high;
++		/delete-node/ cpu-active-low;
++		/delete-node/ cpu-passive;
++	};
++};
++
+ &fan {
++	/* Keep the phandle for userspace cooling-map inspection. */
++	phandle = <&fan>;
+ 	fan-supply = <&fan_3p3v>;
+ 	interrupt-parent = <&pio>;
+ 	interrupts = <5 IRQ_TYPE_EDGE_RISING>;
