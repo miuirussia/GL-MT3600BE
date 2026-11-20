@@ -1,0 +1,52 @@
+Subject: [PATCH] net: phy: realtek: enable PHY-mode EEE for rate-matched RTL8221B
+
+GL-MT3600BE uses a fixed 2500BASE-X host link with rate matching at
+lower copper speeds. The RTL8221B supports EEE in PHY mode in this
+configuration. Enable it for the Clause 45 RTL8221B variants in that
+mode and restart autonegotiation when the PHYCR2 setting changes.
+
+Based on Chukun Pan's PHY-mode EEE patch and the link tests in OpenWrt
+issue #20967.
+
+Link: https://github.com/aiamadeus/openwrt/commit/ef56b476df1cf7a12b0af24e02762fec6024bccb
+Link: https://github.com/openwrt/openwrt/issues/20967
+
+--- a/drivers/net/phy/realtek/realtek_main.c
++++ b/drivers/net/phy/realtek/realtek_main.c
+@@ -166,6 +166,9 @@
+ #define RTL8221B_PHYCR1_ALDPS_XTAL_OFF_EN	BIT(12)
+ #define RTL8221B_PHYCR1_PHYAD_0_EN		BIT(13)
+ 
++#define RTL8221B_PHYCR2				0xa432
++#define RTL8221B_PHYCR2_PHY_EEE_ENABLE		BIT(5)
++
+ #define RTL8366RB_POWER_SAVE			0x15
+ #define RTL8366RB_POWER_SAVE_ON			BIT(12)
+ 
+@@ -1445,7 +1448,25 @@
+ 
+ static int rtl822xb_config_init(struct phy_device *phydev)
+ {
+-	return rtl822x_set_serdes_option_mode(phydev, false);
++	int ret;
++
++	ret = rtl822x_set_serdes_option_mode(phydev, false);
++	if (ret < 0)
++		return ret;
++
++	/* RTL8221B in rate matching mode only supports PHY-mode EEE. */
++	if (!phydev->is_c45 || phydev->rate_matching != RATE_MATCH_PAUSE)
++		return 0;
++
++	ret = phy_modify_mmd_changed(phydev, MDIO_MMD_VEND2, RTL8221B_PHYCR2,
++				     RTL8221B_PHYCR2_PHY_EEE_ENABLE,
++				     RTL8221B_PHYCR2_PHY_EEE_ENABLE);
++	if (ret <= 0)
++		return ret;
++	if (phydev->autoneg == AUTONEG_DISABLE)
++		return 0;
++
++	return genphy_c45_restart_aneg(phydev);
+ }
+ 
+ static int rtl822xb_get_rate_matching(struct phy_device *phydev,

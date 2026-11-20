@@ -1,0 +1,579 @@
+From 5652b98952c4da76060bbe051b521da3dba7164f Mon Sep 17 00:00:00 2001
+From: Daniel Golle <daniel@makrotopia.org>
+Date: Sat, 3 Jan 2026 18:43:33 +0000
+Subject: [PATCH] kernel: net: phy: realtek: replace hack with proper fix
+
+RealTek's 2.5G PHYs suffer from an up to now inexplicable problem which
+results in the SerDes mode not being properly setup and disabling
+in-band AN leading to a timeout waiting for a busy-bit to clear. Up to
+now there has been a crude work-around: resetting the PHY and trying
+another time.
+
+The cause has now been found as a wrong access to register PHYCR1 on
+MDIO_MMD_VEND1 instead of MDIO_MMD_VEND2 when setting up ALDPS as well
+as disabling the MDIO broadcast address 0.
+
+In order to access MDIO_MMD_VEND2 on Clause-22-only busses a custom
+.read_mmd and .write_mmd ops are implemented, mapping MDIO_MMD_VEND2 to
+paged access as this is required.
+
+Also, as ALDPS by design disables the SerDes PCS of the PHY in case the
+link has been down for a while, move enabling ALDPS to the end of the
+config_init function to not face problems when configuring the interface
+mode and in-band AN.
+
+Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+
+Backport to OpenWrt 25.12. Read the ALDPS property in config_init so
+PHY variants without rtl822x_probe can use the same initialization.
+Refresh the PHYCR1 hunk against the 6.12 patch series.
+---
+ .../715-net-phy-export-mmd_phy_-functions.patch    |  61 ++++++++
+ ...ltek-use-paged-access-for-MDIO_MMD_VEND2-.patch | 166 +++++++++++++++++++++
+ ...altek-use-genphy_soft_reset-for-2.5G-PHYs.patch |  14 +-
+ ...ek-disable-SGMII-in-band-AN-for-2-5G-PHYs.patch |   4 +-
+ ...ltek-make-sure-paged-read-is-protected-by.patch |   2 +-
+ .../720-04-net-phy-realtek-setup-aldps.patch       |  48 +++---
+ ...-realtek-detect-early-version-of-RTL8221B.patch |   2 +-
+ ...phy-realtek-mark-existing-MMDs-as-present.patch |   2 +-
+ ...net-phy-realtek-work-around-broken-serdes.patch |  58 -------
+ ...09-net-phy-realtek-disable-MDIO-broadcast.patch |  28 ++--
+ 10 files changed, 287 insertions(+), 98 deletions(-)
+
+diff --git a/target/linux/generic/pending-6.12/715-net-phy-export-mmd_phy_-functions.patch b/target/linux/generic/pending-6.12/715-net-phy-export-mmd_phy_-functions.patch
+new file mode 100644
+index 0000000000000000000000000000000000000000..864dde0cef3900f340f7ee8fd7795346801d4171
+--- /dev/null
++++ b/target/linux/generic/pending-6.12/715-net-phy-export-mmd_phy_-functions.patch
+@@ -0,0 +1,61 @@
++From: Daniel Golle <daniel@makrotopia.org>
++Date: Mon, 5 Jan 2026 14:51:47 +0000
++Subject: [PATCH] net: phy: export mmd_phy_read and mmd_phy_write to phylib.h
++
++Helper functions mmd_phy_read and mmd_phy_write are useful for PHYs
++which require custom MMD access functions for some but not all MMDs.
++
++This patch replaces pending upstream patch
++"net: phy: move mmd_phy_read and mmd_phy_write to phylib.h"
++for Linux 6.12.
++
++See also
++https://patchwork.kernel.org/project/netdevbpf/patch/79169cd624a3572d426e42c7b13cd2654a35d0cb.1767630451.git.daniel@makrotopia.org/
++--- a/drivers/net/phy/phy-core.c
+++++ b/drivers/net/phy/phy-core.c
++@@ -542,8 +542,8 @@ static void mmd_phy_indirect(struct mii_
++ 			devad | MII_MMD_CTRL_NOINCR);
++ }
++ 
++-static int mmd_phy_read(struct mii_bus *bus, int phy_addr, bool is_c45,
++-			int devad, u32 regnum)
+++int mmd_phy_read(struct mii_bus *bus, int phy_addr, bool is_c45,
+++		 int devad, u32 regnum)
++ {
++ 	if (is_c45)
++ 		return __mdiobus_c45_read(bus, phy_addr, devad, regnum);
++@@ -552,9 +552,10 @@ static int mmd_phy_read(struct mii_bus *
++ 	/* Read the content of the MMD's selected register */
++ 	return __mdiobus_read(bus, phy_addr, MII_MMD_DATA);
++ }
+++EXPORT_SYMBOL_GPL(mmd_phy_read);
++ 
++-static int mmd_phy_write(struct mii_bus *bus, int phy_addr, bool is_c45,
++-			 int devad, u32 regnum, u16 val)
+++int mmd_phy_write(struct mii_bus *bus, int phy_addr, bool is_c45,
+++		  int devad, u32 regnum, u16 val)
++ {
++ 	if (is_c45)
++ 		return __mdiobus_c45_write(bus, phy_addr, devad, regnum, val);
++@@ -563,6 +564,7 @@ static int mmd_phy_write(struct mii_bus
++ 	/* Write the data into MMD's selected register */
++ 	return __mdiobus_write(bus, phy_addr, MII_MMD_DATA, val);
++ }
+++EXPORT_SYMBOL_GPL(mmd_phy_write);
++ 
++ /**
++  * __phy_read_mmd - Convenience function for reading a register
++--- a/include/linux/phy.h
+++++ b/include/linux/phy.h
++@@ -2054,6 +2054,11 @@ extern struct phy_driver genphy_c45_driv
++ /* The gen10g_* functions are the old Clause 45 stub */
++ int gen10g_config_aneg(struct phy_device *phydev);
++ 
+++int mmd_phy_read(struct mii_bus *bus, int phy_addr, bool is_c45,
+++		 int devad, u32 regnum);
+++int mmd_phy_write(struct mii_bus *bus, int phy_addr, bool is_c45,
+++		  int devad, u32 regnum, u16 val);
+++
++ static inline int phy_read_status(struct phy_device *phydev)
++ {
++ 	if (!phydev->drv)
+diff --git a/target/linux/generic/pending-6.12/720-00-net-phy-realtek-use-paged-access-for-MDIO_MMD_VEND2-.patch b/target/linux/generic/pending-6.12/720-00-net-phy-realtek-use-paged-access-for-MDIO_MMD_VEND2-.patch
+new file mode 100644
+index 0000000000000000000000000000000000000000..165ec4c22918656392f93f17876ee93b721f3e05
+--- /dev/null
++++ b/target/linux/generic/pending-6.12/720-00-net-phy-realtek-use-paged-access-for-MDIO_MMD_VEND2-.patch
+@@ -0,0 +1,166 @@
++From a81850660c9fc259d090e9207f81e8e76d9494ce Mon Sep 17 00:00:00 2001
++From: Daniel Golle <daniel@makrotopia.org>
++Date: Sun, 4 Jan 2026 10:13:29 +0000
++Subject: [PATCH] net: phy: realtek: use paged access for MDIO_MMD_VEND2 in C22
++ mode
++
++RTL822x cannot access MDIO_MMD_VEND2 via MII_MMD_CTRL/MII_MMD_DATA.
++A mapping to use paged access needs to be used instead.
++All other MMD devices can be accessed as usual.
++Implement phy_read_mmd and phy_write_mmd using paged access for
++MDIO_MMD_VEND2 in Clause-22 mode instead of relying on
++MII_MMD_CTRL/MII_MMD_DATA.
++This allows eg. rtl822x_config_aneg to work as expected in case the
++MDIO bus doesn't support Clause-45 access.
++
++Suggested-by: Bevan Weiss <bevan.weiss@gmail.com>
++Signed-off-by: Daniel Golle <daniel@makrotopia.org>
++--- a/drivers/net/phy/realtek/realtek_main.c
+++++ b/drivers/net/phy/realtek/realtek_main.c
++@@ -131,9 +131,8 @@
++ #define RTL822X_VND1_SERDES_CTRL3_MODE_SGMII			0x02
++ #define RTL822X_VND1_SERDES_CTRL3_MODE_2500BASEX		0x16
++ 
++-/* RTL822X_VND2_XXXXX registers are only accessible when phydev->is_c45
++- * is set, they cannot be accessed by C45-over-C22.
++- */
+++#define RTL822X_VND2_TO_PAGE(reg)		((reg) >> 4)
+++#define RTL822X_VND2_TO_PAGE_REG(reg)		(16 + (((reg) & GENMASK(3, 0)) >> 1))
++ #define RTL822X_VND2_C22_REG(reg)		(0xa400 + 2 * (reg))
++ 
++ #define RTL8221B_VND2_INER			0xa4d2
++@@ -1238,6 +1237,80 @@ static int rtl822x_probe(struct phy_devi
++ 	return 0;
++ }
++ 
+++/* RTL822x cannot access MDIO_MMD_VEND2 via MII_MMD_CTRL/MII_MMD_DATA.
+++ * A mapping to use paged access needs to be used instead.
+++ * All other MMD devices can be accessed as usual.
+++ */
+++static int rtl822xb_read_mmd(struct phy_device *phydev, int devnum, u16 reg)
+++{
+++	int oldpage, ret, read_ret;
+++	u16 page;
+++
+++	/* Use default method for all MMDs except MDIO_MMD_VEND2 or in case
+++	 * Clause-45 access is available
+++	 */
+++	if (devnum != MDIO_MMD_VEND2 || phydev->is_c45)
+++		return mmd_phy_read(phydev->mdio.bus, phydev->mdio.addr,
+++				    phydev->is_c45, devnum, reg);
+++
+++	/* Use paged access for MDIO_MMD_VEND2 over Clause-22 */
+++	page = RTL822X_VND2_TO_PAGE(reg);
+++	oldpage = __phy_read(phydev, RTL821x_PAGE_SELECT);
+++	if (oldpage < 0)
+++		return oldpage;
+++
+++	if (oldpage != page) {
+++		ret = __phy_write(phydev, RTL821x_PAGE_SELECT, page);
+++		if (ret < 0)
+++			return ret;
+++	}
+++
+++	read_ret = __phy_read(phydev, RTL822X_VND2_TO_PAGE_REG(reg));
+++	if (oldpage != page) {
+++		ret = __phy_write(phydev, RTL821x_PAGE_SELECT, oldpage);
+++		if (ret < 0)
+++			return ret;
+++	}
+++
+++	return read_ret;
+++}
+++
+++static int rtl822xb_write_mmd(struct phy_device *phydev, int devnum, u16 reg,
+++			      u16 val)
+++{
+++	int oldpage, ret, write_ret;
+++	u16 page;
+++
+++	/* Use default method for all MMDs except MDIO_MMD_VEND2 or in case
+++	 * Clause-45 access is available
+++	 */
+++	if (devnum != MDIO_MMD_VEND2 || phydev->is_c45)
+++		return mmd_phy_write(phydev->mdio.bus, phydev->mdio.addr,
+++				     phydev->is_c45, devnum, reg, val);
+++
+++	/* Use paged access for MDIO_MMD_VEND2 over Clause-22 */
+++	page = RTL822X_VND2_TO_PAGE(reg);
+++	oldpage = __phy_read(phydev, RTL821x_PAGE_SELECT);
+++	if (oldpage < 0)
+++		return oldpage;
+++
+++	if (oldpage != page) {
+++		ret = __phy_write(phydev, RTL821x_PAGE_SELECT, page);
+++		if (ret < 0)
+++			return ret;
+++	}
+++
+++	write_ret = __phy_write(phydev,  RTL822X_VND2_TO_PAGE_REG(reg), val);
+++	if (oldpage != page) {
+++		ret = __phy_write(phydev, RTL821x_PAGE_SELECT, oldpage);
+++		if (ret < 0)
+++			return ret;
+++	}
+++
+++	return write_ret;
+++}
+++
+++
++ static int rtl822x_set_serdes_option_mode(struct phy_device *phydev, bool gen1)
++ {
++ 	bool has_2500, has_sgmii;
++@@ -2097,6 +2170,8 @@ static struct phy_driver realtek_drvs[]
++ 		.resume		= rtlgen_resume,
++ 		.read_page	= rtl821x_read_page,
++ 		.write_page	= rtl821x_write_page,
+++		.read_mmd	= rtl822xb_read_mmd,
+++		.write_mmd	= rtl822xb_write_mmd,
++ 	}, {
++ 		.match_phy_device = rtl8221b_match_phy_device,
++ 		.name		= "RTL8226B_RTL8221B 2.5Gbps PHY",
++@@ -2109,6 +2184,8 @@ static struct phy_driver realtek_drvs[]
++ 		.resume		= rtlgen_resume,
++ 		.read_page	= rtl821x_read_page,
++ 		.write_page	= rtl821x_write_page,
+++		.read_mmd	= rtl822xb_read_mmd,
+++		.write_mmd	= rtl822xb_write_mmd,
++ 	}, {
++ 		PHY_ID_MATCH_EXACT(0x001cc838),
++ 		.name           = "RTL8226-CG 2.5Gbps PHY",
++@@ -2119,6 +2196,8 @@ static struct phy_driver realtek_drvs[]
++ 		.read_status    = rtl822xb_c45_read_status,
++ 		.suspend        = genphy_c45_pma_suspend,
++ 		.resume         = rtlgen_c45_resume,
+++		.read_mmd	= rtl822xb_read_mmd,
+++		.write_mmd	= rtl822xb_write_mmd,
++ 	}, {
++ 		PHY_ID_MATCH_EXACT(0x001cc848),
++ 		.name           = "RTL8226B-CG_RTL8221B-CG 2.5Gbps PHY",
++@@ -2131,6 +2210,8 @@ static struct phy_driver realtek_drvs[]
++ 		.resume         = rtlgen_resume,
++ 		.read_page      = rtl821x_read_page,
++ 		.write_page     = rtl821x_write_page,
+++		.read_mmd	= rtl822xb_read_mmd,
+++		.write_mmd	= rtl822xb_write_mmd,
++ 	}, {
++ 		.match_phy_device = rtl8221b_vb_cg_c22_match_phy_device,
++ 		.name           = "RTL8221B-VB-CG 2.5Gbps PHY (C22)",
++@@ -2144,6 +2225,8 @@ static struct phy_driver realtek_drvs[]
++ 		.resume         = rtlgen_resume,
++ 		.read_page      = rtl821x_read_page,
++ 		.write_page     = rtl821x_write_page,
+++		.read_mmd	= rtl822xb_read_mmd,
+++		.write_mmd	= rtl822xb_write_mmd,
++ 	}, {
++ 		.match_phy_device = rtl8221b_vb_cg_c45_match_phy_device,
++ 		.name           = "RTL8221B-VB-CG 2.5Gbps PHY (C45)",
++@@ -2170,6 +2253,8 @@ static struct phy_driver realtek_drvs[]
++ 		.resume         = rtlgen_resume,
++ 		.read_page      = rtl821x_read_page,
++ 		.write_page     = rtl821x_write_page,
+++		.read_mmd	= rtl822xb_read_mmd,
+++		.write_mmd	= rtl822xb_write_mmd,
++ 	}, {
++ 		.match_phy_device = rtl8221b_vm_cg_c45_match_phy_device,
++ 		.name           = "RTL8221B-VM-CG 2.5Gbps PHY (C45)",
+diff --git a/target/linux/generic/pending-6.12/720-01-net-phy-realtek-use-genphy_soft_reset-for-2.5G-PHYs.patch b/target/linux/generic/pending-6.12/720-01-net-phy-realtek-use-genphy_soft_reset-for-2.5G-PHYs.patch
+index ce4fd0311564a54ba77a283a2e96238a6b3c52d6..8ee2628e0db0612f789a8c71108fab32cf8617df 100644
+--- a/target/linux/generic/pending-6.12/720-01-net-phy-realtek-use-genphy_soft_reset-for-2.5G-PHYs.patch
++++ b/target/linux/generic/pending-6.12/720-01-net-phy-realtek-use-genphy_soft_reset-for-2.5G-PHYs.patch
+@@ -15,7 +15,7 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+ 
+ --- a/drivers/net/phy/realtek/realtek_main.c
+ +++ b/drivers/net/phy/realtek/realtek_main.c
+-@@ -2090,6 +2090,7 @@ static struct phy_driver realtek_drvs[]
++@@ -2163,6 +2163,7 @@ static struct phy_driver realtek_drvs[]
+  	}, {
+  		.name		= "RTL8226 2.5Gbps PHY",
+  		.match_phy_device = rtl8226_match_phy_device,
+@@ -23,7 +23,7 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+  		.get_features	= rtl822x_get_features,
+  		.config_aneg	= rtl822x_config_aneg,
+  		.read_status	= rtl822x_read_status,
+-@@ -2100,6 +2101,7 @@ static struct phy_driver realtek_drvs[]
++@@ -2175,6 +2176,7 @@ static struct phy_driver realtek_drvs[]
+  	}, {
+  		.match_phy_device = rtl8221b_match_phy_device,
+  		.name		= "RTL8226B_RTL8221B 2.5Gbps PHY",
+@@ -31,7 +31,7 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+  		.get_features	= rtl822x_get_features,
+  		.config_aneg	= rtl822x_config_aneg,
+  		.config_init    = rtl822xb_config_init,
+-@@ -2122,6 +2124,7 @@ static struct phy_driver realtek_drvs[]
++@@ -2201,6 +2203,7 @@ static struct phy_driver realtek_drvs[]
+  	}, {
+  		PHY_ID_MATCH_EXACT(0x001cc848),
+  		.name           = "RTL8226B-CG_RTL8221B-CG 2.5Gbps PHY",
+@@ -39,7 +39,7 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+  		.get_features   = rtl822x_get_features,
+  		.config_aneg    = rtl822x_config_aneg,
+  		.config_init    = rtl822xb_config_init,
+-@@ -2134,6 +2137,7 @@ static struct phy_driver realtek_drvs[]
++@@ -2215,6 +2218,7 @@ static struct phy_driver realtek_drvs[]
+  	}, {
+  		.match_phy_device = rtl8221b_vb_cg_c22_match_phy_device,
+  		.name           = "RTL8221B-VB-CG 2.5Gbps PHY (C22)",
+@@ -47,7 +47,7 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+  		.probe		= rtl822x_probe,
+  		.get_features   = rtl822x_get_features,
+  		.config_aneg    = rtl822x_config_aneg,
+-@@ -2149,6 +2153,7 @@ static struct phy_driver realtek_drvs[]
++@@ -2232,6 +2236,7 @@ static struct phy_driver realtek_drvs[]
+  		.name           = "RTL8221B-VB-CG 2.5Gbps PHY (C45)",
+  		.config_intr	= rtl8221b_config_intr,
+  		.handle_interrupt = rtl8221b_handle_interrupt,
+@@ -55,7 +55,7 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+  		.probe		= rtl822x_probe,
+  		.config_init    = rtl822xb_config_init,
+  		.get_rate_matching = rtl822xb_get_rate_matching,
+-@@ -2160,6 +2165,7 @@ static struct phy_driver realtek_drvs[]
++@@ -2243,6 +2248,7 @@ static struct phy_driver realtek_drvs[]
+  	}, {
+  		.match_phy_device = rtl8221b_vm_cg_c22_match_phy_device,
+  		.name           = "RTL8221B-VM-CG 2.5Gbps PHY (C22)",
+@@ -63,7 +63,7 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+  		.probe		= rtl822x_probe,
+  		.get_features   = rtl822x_get_features,
+  		.config_aneg    = rtl822x_config_aneg,
+-@@ -2175,6 +2181,7 @@ static struct phy_driver realtek_drvs[]
++@@ -2260,6 +2266,7 @@ static struct phy_driver realtek_drvs[]
+  		.name           = "RTL8221B-VM-CG 2.5Gbps PHY (C45)",
+  		.config_intr	= rtl8221b_config_intr,
+  		.handle_interrupt = rtl8221b_handle_interrupt,
+diff --git a/target/linux/generic/pending-6.12/720-02-net-phy-realtek-disable-SGMII-in-band-AN-for-2-5G-PHYs.patch b/target/linux/generic/pending-6.12/720-02-net-phy-realtek-disable-SGMII-in-band-AN-for-2-5G-PHYs.patch
+index 85b2dbd8c612daf37856c6518cfdf78f231c0119..4ee4e763d407cbe0c095d7a98b41dccb35bf30aa 100644
+--- a/target/linux/generic/pending-6.12/720-02-net-phy-realtek-disable-SGMII-in-band-AN-for-2-5G-PHYs.patch
++++ b/target/linux/generic/pending-6.12/720-02-net-phy-realtek-disable-SGMII-in-band-AN-for-2-5G-PHYs.patch
+@@ -20,7 +20,7 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+ 
+ --- a/drivers/net/phy/realtek/realtek_main.c
+ +++ b/drivers/net/phy/realtek/realtek_main.c
+-@@ -1241,8 +1241,8 @@ static int rtl822x_probe(struct phy_devi
++@@ -1345,8 +1345,8 @@ static int rtl822xb_write_mmd(struct phy
+  static int rtl822x_set_serdes_option_mode(struct phy_device *phydev, bool gen1)
+  {
+  	bool has_2500, has_sgmii;
+@@ -30,7 +30,7 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+  
+  	has_2500 = test_bit(PHY_INTERFACE_MODE_2500BASEX,
+  			    phydev->host_interfaces) ||
+-@@ -1284,18 +1284,42 @@ static int rtl822x_set_serdes_option_mod
++@@ -1388,18 +1388,42 @@ static int rtl822x_set_serdes_option_mod
+  				     RTL822X_VND1_SERDES_OPTION,
+  				     RTL822X_VND1_SERDES_OPTION_MODE_MASK,
+  				     mode);
+diff --git a/target/linux/generic/pending-6.12/720-03-net-phy-realtek-make-sure-paged-read-is-protected-by.patch b/target/linux/generic/pending-6.12/720-03-net-phy-realtek-make-sure-paged-read-is-protected-by.patch
+index d603be802e62b1d491dbf884f1f5b079e807fc24..710adf7e7a5649f3bcf34ef811b8bb41e8b57549 100644
+--- a/target/linux/generic/pending-6.12/720-03-net-phy-realtek-make-sure-paged-read-is-protected-by.patch
++++ b/target/linux/generic/pending-6.12/720-03-net-phy-realtek-make-sure-paged-read-is-protected-by.patch
+@@ -18,7 +18,7 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+ 
+ --- a/drivers/net/phy/realtek/realtek_main.c
+ +++ b/drivers/net/phy/realtek/realtek_main.c
+-@@ -1711,9 +1711,11 @@ static bool rtlgen_supports_2_5gbps(stru
++@@ -1815,9 +1815,11 @@ static bool rtlgen_supports_2_5gbps(stru
+  {
+  	int val;
+  
+diff --git a/target/linux/generic/pending-6.12/720-04-net-phy-realtek-setup-aldps.patch b/target/linux/generic/pending-6.12/720-04-net-phy-realtek-setup-aldps.patch
+index e65dc43cba32c0c66d0a9248d1d2ddbc600dbaec..ad72f80691e3c6975f21c58e5922d760632b457c 100644
+--- a/target/linux/generic/pending-6.12/720-04-net-phy-realtek-setup-aldps.patch
++++ b/target/linux/generic/pending-6.12/720-04-net-phy-realtek-setup-aldps.patch
+@@ -7,13 +7,9 @@ Setup Link Down Power Saving Mode according the DTS property
+ just like for RTL821x 1GE PHYs.
+ 
+ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+----
+- drivers/net/phy/realtek/realtek_main.c | 11 +++++++++++
+- 1 file changed, 11 insertions(+)
+-
+ --- a/drivers/net/phy/realtek/realtek_main.c
+ +++ b/drivers/net/phy/realtek/realtek_main.c
+-@@ -162,6 +162,10 @@
++@@ -161,6 +161,10 @@
+  
+  #define RTL8224_SRAM_RTCT_LEN(pair)		(0x8028 + (pair) * 4)
+  
+@@ -24,19 +20,37 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+  #define RTL8366RB_POWER_SAVE			0x15
+  #define RTL8366RB_POWER_SAVE_ON			BIT(12)
+  
+-@@ -1301,6 +1305,15 @@ static int rtl822x_set_serdes_option_mod
+- 			return ret;
+- 	}
++@@ -1310,6 +1314,18 @@ static int rtl822xb_write_mmd(struct phy
++ 	return write_ret;
++ }
+  
+-+	if (of_property_read_bool(phydev->mdio.dev.of_node, "realtek,aldps-enable"))
+-+		ret = phy_set_bits_mmd(phydev, MDIO_MMD_VEND1, RTL8221B_PHYCR1,
+-+				 RTL8221B_PHYCR1_ALDPS_EN | RTL8221B_PHYCR1_ALDPS_XTAL_OFF_EN);
+-+	else
+-+		ret = phy_clear_bits_mmd(phydev, MDIO_MMD_VEND1, RTL8221B_PHYCR1,
+-+				   RTL8221B_PHYCR1_ALDPS_EN | RTL8221B_PHYCR1_ALDPS_XTAL_OFF_EN);
+++static int rtl822x_init_phycr1(struct phy_device *phydev)
+++{
+++	struct device_node *np = phydev->mdio.dev.of_node;
+++	u16 val = 0;
+++
+++	if (of_property_read_bool(np, "realtek,aldps-enable"))
+++		val = RTL8221B_PHYCR1_ALDPS_EN | RTL8221B_PHYCR1_ALDPS_XTAL_OFF_EN;
+++
+++	return phy_modify_mmd_changed(phydev, MDIO_MMD_VEND2, RTL8221B_PHYCR1,
+++				      RTL8221B_PHYCR1_ALDPS_EN |
+++				      RTL8221B_PHYCR1_ALDPS_XTAL_OFF_EN, val);
+++}
++ 
++ static int rtl822x_set_serdes_option_mode(struct phy_device *phydev, bool gen1)
++ {
++@@ -1392,6 +1408,14 @@ static int rtl822x_set_serdes_option_mod
++ 	if (ret < 0)
++ 		return ret;
++ 
+++	ret = phy_write_mmd(phydev, MDIO_MMD_VEND1, 0x6f11, 0x8020);
+ +	if (ret < 0)
+ +		return ret;
+ +
+- 	/* Disable SGMII AN */
+- 	ret = phy_write_mmd(phydev, MDIO_MMD_VEND1, 0x7588, 0x2);
+- 	if (ret < 0)
+++	ret = rtl822x_init_phycr1(phydev);
+++	if (ret < 0)
+++		return ret;
+++
++ 	return 0;
++ }
++ 
+diff --git a/target/linux/generic/pending-6.12/720-05-net-phy-realtek-detect-early-version-of-RTL8221B.patch b/target/linux/generic/pending-6.12/720-05-net-phy-realtek-detect-early-version-of-RTL8221B.patch
+index 80023a0a51ce27395eb0f0b2ab8d476e990ca30a..7afa1595887bdfbdf578c850506e4343d5ce5f70 100644
+--- a/target/linux/generic/pending-6.12/720-05-net-phy-realtek-detect-early-version-of-RTL8221B.patch
++++ b/target/linux/generic/pending-6.12/720-05-net-phy-realtek-detect-early-version-of-RTL8221B.patch
+@@ -14,7 +14,7 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
+ --- a/drivers/net/phy/realtek/realtek_main.c
+ +++ b/drivers/net/phy/realtek/realtek_main.c
+-@@ -1768,10 +1768,32 @@ static int rtl8226_match_phy_device(stru
++@@ -1900,10 +1900,32 @@ static int rtl8226_match_phy_device(stru
+  static int rtlgen_is_c45_match(struct phy_device *phydev, unsigned int id,
+  			       bool is_c45)
+  {
+diff --git a/target/linux/generic/pending-6.12/720-07-net-phy-realtek-mark-existing-MMDs-as-present.patch b/target/linux/generic/pending-6.12/720-07-net-phy-realtek-mark-existing-MMDs-as-present.patch
+index b06ddb09e2c7067010b267431ee264bbce1f7406..50fa7c9efc85fc0cca6f2ae7d964628e1232c6f1 100644
+--- a/target/linux/generic/pending-6.12/720-07-net-phy-realtek-mark-existing-MMDs-as-present.patch
++++ b/target/linux/generic/pending-6.12/720-07-net-phy-realtek-mark-existing-MMDs-as-present.patch
+@@ -15,7 +15,7 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+ 
+ --- a/drivers/net/phy/realtek/realtek_main.c
+ +++ b/drivers/net/phy/realtek/realtek_main.c
+-@@ -1465,6 +1465,9 @@ static int rtl822x_c45_get_features(stru
++@@ -1597,6 +1597,9 @@ static int rtl822x_c45_get_features(stru
+  	linkmode_set_bit(ETHTOOL_LINK_MODE_TP_BIT,
+  			 phydev->supported);
+  
+diff --git a/target/linux/generic/pending-6.12/720-08-net-phy-realtek-work-around-broken-serdes.patch b/target/linux/generic/pending-6.12/720-08-net-phy-realtek-work-around-broken-serdes.patch
+deleted file mode 100644
+index 5bde9d157d7e83ea6755dc59f2141129ca3423ff..0000000000000000000000000000000000000000
+--- a/target/linux/generic/pending-6.12/720-08-net-phy-realtek-work-around-broken-serdes.patch
++++ /dev/null
+@@ -1,58 +0,0 @@
+-From: Daniel Golle <daniel@makrotopia.org>
+-Date: Thu, 30 Jan 2025 05:33:12 +0000
+-Subject: [PATCH] net: phy: realtek: work around broken SerDes
+-
+-For still unknown reasons the SerDes init sequence may sometimes
+-time out because a self-clearing bit never clears, indicating the
+-PHY has entered an unrecoverable error state.
+-
+-Work-around the issue by triggering a hardware reset and retry the
+-setup sequence while warning the user that this has happened.
+-This is really more of a work-around than a fix, and should be
+-replaced by a better actual fix in future (hopefully).
+-
+-Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+----
+---- a/drivers/net/phy/realtek/realtek_main.c
+-+++ b/drivers/net/phy/realtek/realtek_main.c
+-@@ -1345,6 +1345,22 @@ static int rtl822xb_config_init(struct p
+- 	return rtl822x_set_serdes_option_mode(phydev, false);
+- }
+- 
+-+static int rtl822xb_config_init_war(struct phy_device *phydev)
+-+{
+-+	int ret;
+-+
+-+	ret = rtl822xb_config_init(phydev);
+-+
+-+	if (ret == -ETIMEDOUT) {
+-+		phydev_warn(phydev, "SerDes setup timed out, retrying\n");
+-+		phy_device_reset(phydev, 1);
+-+		phy_device_reset(phydev, 0);
+-+		ret = rtl822xb_config_init(phydev);
+-+	}
+-+
+-+	return ret;
+-+}
+-+
+- static int rtl822xb_get_rate_matching(struct phy_device *phydev,
+- 				      phy_interface_t iface)
+- {
+-@@ -2219,7 +2235,7 @@ static struct phy_driver realtek_drvs[]
+- 		.handle_interrupt = rtl8221b_handle_interrupt,
+- 		.soft_reset     = rtl822x_c45_soft_reset,
+- 		.probe		= rtl822x_probe,
+--		.config_init    = rtl822xb_config_init,
+-+		.config_init    = rtl822xb_config_init_war,
+- 		.get_rate_matching = rtl822xb_get_rate_matching,
+- 		.get_features   = rtl822x_c45_get_features,
+- 		.config_aneg    = rtl822x_c45_config_aneg,
+-@@ -2247,7 +2263,7 @@ static struct phy_driver realtek_drvs[]
+- 		.handle_interrupt = rtl8221b_handle_interrupt,
+- 		.soft_reset     = rtl822x_c45_soft_reset,
+- 		.probe		= rtl822x_probe,
+--		.config_init    = rtl822xb_config_init,
+-+		.config_init    = rtl822xb_config_init_war,
+- 		.get_rate_matching = rtl822xb_get_rate_matching,
+- 		.get_features   = rtl822x_c45_get_features,
+- 		.config_aneg    = rtl822x_c45_config_aneg,
+diff --git a/target/linux/generic/pending-6.12/720-09-net-phy-realtek-disable-MDIO-broadcast.patch b/target/linux/generic/pending-6.12/720-09-net-phy-realtek-disable-MDIO-broadcast.patch
+index 4462e4b27478a77d8c6ddbe0bd238e5d9a72e59a..a23c88ebe5b06bddc952a33afc32903a4aeff070 100644
+--- a/target/linux/generic/pending-6.12/720-09-net-phy-realtek-disable-MDIO-broadcast.patch
++++ b/target/linux/generic/pending-6.12/720-09-net-phy-realtek-disable-MDIO-broadcast.patch
+@@ -13,15 +13,21 @@ Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+ ---
+ --- a/drivers/net/phy/realtek/realtek_main.c
+ +++ b/drivers/net/phy/realtek/realtek_main.c
+-@@ -1256,6 +1256,11 @@ static int rtl822x_set_serdes_option_mod
+- 			     phydev->host_interfaces) ||
+- 		    phydev->interface == PHY_INTERFACE_MODE_SGMII;
++@@ -165,6 +165,7 @@
++ #define RTL8221B_PHYCR1				0xa430
++ #define RTL8221B_PHYCR1_ALDPS_EN		BIT(2)
++ #define RTL8221B_PHYCR1_ALDPS_XTAL_OFF_EN	BIT(12)
+++#define RTL8221B_PHYCR1_PHYAD_0_EN		BIT(13)
+  
+-+	/* disable listening on MDIO broadcast address (0) */
+-+	ret = phy_clear_bits_mmd(phydev, MDIO_MMD_VEND2, 0xa430, BIT(13));
+-+	if (ret < 0)
+-+		return ret;
+-+
+- 	/* fill in possible interfaces */
+- 	__assign_bit(PHY_INTERFACE_MODE_2500BASEX, phydev->possible_interfaces,
+- 		     has_2500);
++ #define RTL8366RB_POWER_SAVE			0x15
++ #define RTL8366RB_POWER_SAVE_ON			BIT(12)
++@@ -1372,7 +1373,8 @@ static int rtl822x_init_phycr1(struct ph
++ 
++ 	return phy_modify_mmd_changed(phydev, MDIO_MMD_VEND2, RTL8221B_PHYCR1,
++ 				      RTL8221B_PHYCR1_ALDPS_EN |
++-				      RTL8221B_PHYCR1_ALDPS_XTAL_OFF_EN, val);
+++				      RTL8221B_PHYCR1_ALDPS_XTAL_OFF_EN |
+++				      RTL8221B_PHYCR1_PHYAD_0_EN, val);
++ }
++ 
++ static int rtl822x_set_serdes_option_mode(struct phy_device *phydev, bool gen1)
