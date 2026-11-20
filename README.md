@@ -184,7 +184,14 @@ Successful builds publish firmware, a full build archive, and checksums as a pre
 - `v*` tags create separate releases.
 - Manual runs on other branches use `ci-<run>-<attempt>` tags.
 
-Set the repository secret `APK_PRIVATE_KEY` to the contents of `.keys/private-key.pem` to reuse the signing key. Without it, each CI build generates a new key.
+Generate an OpenWrt APK signing key with OpenSSL and upload it as a repository secret using an authenticated GitHub CLI from the repository root.
+
+```sh
+./scripts/generate-apk-key.sh
+gh secret set APK_PRIVATE_KEY < .keys/private-key.pem
+```
+
+The script reuses an existing private key. To set the secret in the GitHub web UI, open **Settings → Secrets and variables → Actions → New repository secret** and paste the full contents of `.keys/private-key.pem` into `APK_PRIVATE_KEY`, including the PEM header and footer. The builder derives the public key from the private key. Without the secret, each CI build generates a new key.
 
 Actions caches downloads and ccache, including after failed builds. It rebuilds the source tree and toolchain each run; cache statistics appear in the job summary.
 
