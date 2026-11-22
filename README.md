@@ -1,6 +1,6 @@
 # OpenWrt for GL-MT3600BE
 
-[OpenWrt 25.12.6](https://downloads.openwrt.org/releases/25.12.6/targets/mediatek/filogic/) for `glinet_gl-mt3600be` (`mediatek/filogic`), Linux 6.12.112. Includes LuCI with HTTPS, English and Russian, the Outline theme, Forkop, fan control, temperature sensors, and zram swap.
+[OpenWrt 25.12.6](https://downloads.openwrt.org/releases/25.12.6/targets/mediatek/filogic/) for `glinet_gl-mt3600be` (`mediatek/filogic`), Linux 6.12.112. Includes LuCI with HTTPS, English and Russian, the Outline theme, Forkop, WireGuard, AmneziaWG, fan control, temperature sensors, and zram swap.
 
 On first boot: hostname `Beryl7`, LAN `192.168.69.1/24`, LuCI at **https://192.168.69.1**. Change these defaults in [uci-defaults/99-local-settings](uci-defaults/99-local-settings).
 
@@ -105,6 +105,10 @@ Patches apply alphabetically. OpenWrt and feed patches use `a/...` and `b/...` p
 - New Wi-Fi configurations default to the RU regulatory domain. On upgrade, an unset or `00` country on a built-in radio takes the other band's configured country, if available, or RU. Wi-Fi starts disabled on a fresh install.
 
 The [GL-MT3600BE backport](patches/README.md) also includes the missing fixes from [plcharriere/gl-mt3600be-openwrt](https://github.com/plcharriere/gl-mt3600be-openwrt/tree/92b668321f968b3bfe3b6a1de23317fe0f3f52ad), adapted to the locked kernel and package versions. It adds MT7987 WED 3.1 and RSS, Ethernet/PPE fixes, Wi-Fi recovery and per-radio settings, hostapd fixes, PHY firmware v7.3, CPU frequency cooling, and board defaults. The NAND image geometry is corrected to 256 KiB erase blocks and 4096-byte pages. Hardware flow offloading is enabled on first boot only when no offloading preference or enabled SQM queue exists.
+
+### WireGuard and AmneziaWG
+
+[vpn.config](configs/packages/vpn.config) enables WireGuard and [AmneziaWG 3.1](https://github.com/Slava-Shchipunov/awg-openwrt/tree/03b62269e2edc168504f057cffaafda11b25ed92) with kernel modules, `wg` / `awg`, and LuCI support. Configure or import profiles in **Network → Interfaces**.
 
 ### Prebuilt APKs
 

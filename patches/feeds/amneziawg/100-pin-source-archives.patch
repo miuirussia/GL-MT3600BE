@@ -1,0 +1,36 @@
+From: routerFW maintainers
+Subject: [PATCH] Pin AmneziaWG sources and verify generated archives
+
+Keep the source commits and archive hashes reproducible alongside the feed
+revision in openwrt.lock.json; do not resolve mutable release tags at build time.
+
+diff --git a/amneziawg-tools/Makefile b/amneziawg-tools/Makefile
+--- a/amneziawg-tools/Makefile
++++ b/amneziawg-tools/Makefile
+@@ -6,8 +6,9 @@ PKG_RELEASE:=1
+ 
+ PKG_SOURCE_PROTO:=git
+ PKG_SOURCE_URL:=https://github.com/amnezia-vpn/amneziawg-tools.git
+-# Version: latest stable release tag
+-PKG_SOURCE_VERSION:=v$(PKG_VERSION)
++# v3.1.20260812
++PKG_SOURCE_VERSION:=ee0f0a9aa34ff0a0da4b3433b9512781cfe02843
++PKG_MIRROR_HASH:=a848363a73f7088154750d9421ad94335033f3d274afe7e0221f853652a995b9
+ 
+ PKG_LICENSE:=GPL-2.0
+ PKG_LICENSE_FILES:=COPYING
+diff --git a/kmod-amneziawg/Makefile b/kmod-amneziawg/Makefile
+--- a/kmod-amneziawg/Makefile
++++ b/kmod-amneziawg/Makefile
+@@ -7,8 +7,9 @@ PKG_RELEASE:=1
+ 
+ PKG_SOURCE_PROTO:=git
+ PKG_SOURCE_URL:=https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git
+-# Version: latest stable release tag
+-PKG_SOURCE_VERSION:=v$(PKG_VERSION)
++# v3.1.20260906
++PKG_SOURCE_VERSION:=4569c4c67f3a57414969260cafbbd04694fbaae0
++PKG_MIRROR_HASH:=b89fa46757d0236699323ff253a30f91e05138afafde77f6522bbf7c2e7619d7
+ PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
+ MAKE_PATH:=src
+ 

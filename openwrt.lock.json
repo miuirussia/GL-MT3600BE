@@ -20,6 +20,7 @@
     {"name": "luci", "url": "https://git.openwrt.org/project/luci.git", "commit": "75a306df84a020c57a631ef5b4c02ace56d93387"},
     {"name": "routing", "url": "https://git.openwrt.org/feed/routing.git", "commit": "48c808034414a2112cf9d5261a20a320e8d0d170"},
     {"name": "telephony", "url": "https://git.openwrt.org/feed/telephony.git", "commit": "2618106d5846a4a542fdf5809f0d3ed228ce439b"},
-    {"name": "video", "url": "https://github.com/openwrt/video.git", "commit": "094bf58da6682f895255a35a84349a79dab4bf95"}
+    {"name": "video", "url": "https://github.com/openwrt/video.git", "commit": "094bf58da6682f895255a35a84349a79dab4bf95"},
+    {"name": "amneziawg", "url": "https://github.com/Slava-Shchipunov/awg-openwrt.git", "commit": "03b62269e2edc168504f057cffaafda11b25ed92"}
   ]
 }
