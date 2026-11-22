@@ -104,6 +104,8 @@ Patches apply alphabetically. OpenWrt and feed patches use `a/...` and `b/...` p
 - [150-gl-mt3600be-userspace-fan-control.patch](patches/openwrt/150-gl-mt3600be-userspace-fan-control.patch) hands PWM fan control to LuCI. The kernel still throttles the CPU at 117 °C and shuts the router down at 125 °C.
 - New Wi-Fi configurations default to the RU regulatory domain. On upgrade, an unset or `00` country on a built-in radio takes the other band's configured country, if available, or RU. Wi-Fi starts disabled on a fresh install.
 
+The [GL-MT3600BE backport](patches/README.md) also includes the missing fixes from [plcharriere/gl-mt3600be-openwrt](https://github.com/plcharriere/gl-mt3600be-openwrt/tree/92b668321f968b3bfe3b6a1de23317fe0f3f52ad), adapted to the locked kernel and package versions. It adds MT7987 WED 3.1 and RSS, Ethernet/PPE fixes, Wi-Fi recovery and per-radio settings, hostapd fixes, PHY firmware v7.3, CPU frequency cooling, and board defaults. The NAND image geometry is corrected to 256 KiB erase blocks and 4096-byte pages. Hardware flow offloading is enabled on first boot only when no offloading preference or enabled SQM queue exists.
+
 ### Prebuilt APKs
 
 | Package | Version | LuCI location |
@@ -164,13 +166,11 @@ Place shell scripts directly in `uci-defaults/`. The builder checks them with `s
 
 OpenWrt removes scripts after they succeed and retries failed scripts. Make them safe to repeat and return zero only after configuration succeeds.
 
-## Official kmods
+## Kernel modules
 
-`100-vermagic-override.patch` forces the official ABI hash from `profiles.json`: `f0a7348f9cb959e1bf4d0447669b031e`. The builder checks the kernel version before building and the hash before export. The firmware includes the official APK kmod repository for this kernel.
+`kernel.vermagic_mode` defaults to `"official"`. The builder writes the release hash `f0a7348f9cb959e1bf4d0447669b031e` to the override file, and `100-vermagic-override.patch` copies it into the kernel build. The builder checks the kernel version before building and the hash before export. The firmware includes the official APK kmod repository. `CONFIG_KERNEL_KALLSYMS` remains disabled.
 
-`configs/device/kernel.config` disables `CONFIG_KERNEL_KALLSYMS` to match the official release. Enabling it changes `struct module` and causes `.gnu.linkonce.this_module section size must match` errors with official kmods, even with the forced hash. Existing firmware needs rebuilding and flashing to apply this setting.
-
-The hash alone does not guarantee compatibility after kernel changes; Linux module loading checks remain active. Build kmods with the firmware when modifying the kernel. To restore native hash calculation, set `kernel.vermagic_mode` to `"native"` in the lock file, then reset and rebuild.
+The backport changes WED, flowtable, and wireless interfaces. The forced hash does not restore their binary compatibility; affected modules need a matching build. Compatibility of unrelated official modules has not been verified. To calculate the hash from the kernel configuration instead, set `kernel.vermagic_mode` to `"native"`, then reset sources and rebuild.
 
 ## GitHub Actions
 

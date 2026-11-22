@@ -1,0 +1,327 @@
+Subject: [PATCH] iwinfo: install the GL-MT3600BE backport series
+
+Source: https://github.com/plcharriere/gl-mt3600be-openwrt/tree/92b668321f968b3bfe3b6a1de23317fe0f3f52ad
+
+diff --git a/package/network/utils/iwinfo/patches/9999-routerfw-plcharriere.patch b/package/network/utils/iwinfo/patches/9999-routerfw-plcharriere.patch
+new file mode 100644
+--- /dev/null
++++ b/package/network/utils/iwinfo/patches/9999-routerfw-plcharriere.patch
+@@ -0,0 +1,318 @@
++Subject: [PATCH] iwinfo: backport GL-MT3600BE fixes to OpenWrt 25.12.6
++
++Source: https://github.com/plcharriere/gl-mt3600be-openwrt/tree/92b668321f968b3bfe3b6a1de23317fe0f3f52ad
++
++Adapted for Linux 6.12.112 and the package revisions in openwrt.lock.json.
++Original patch inventory and authors: patches/plcharriere.json and patches/README.md.
++
++Original authors/sign-offs:
++  Assisted-by: Claude:claude-opus-5-5
++  Assisted-by: Codex:gpt-5.6-sol
++  Assisted-by: Codex:gpt-6-astra
++  From: Paul-Louis Charrière <plcharriere@gmail.com>
++  From: Ruslan Isaev <legale.legale@gmail.com>
++  Signed-off-by: Paul-Louis Charrière <plcharriere@gmail.com>
++  Signed-off-by: Ruslan Isaev <legale.legale@gmail.com>
++
++diff --git a/iwinfo_nl80211.c b/iwinfo_nl80211.c
++index adc10b9..ad730d4 100644
++--- a/iwinfo_nl80211.c
+++++ b/iwinfo_nl80211.c
++@@ -40,6 +40,7 @@ static struct nl80211_state *nls = NULL;
++ struct nl80211_if_data {
++ 	int mode;
++ 	int radio_idx;
+++	uint32_t radio_mask;
++ };
++ 
++ static void nl80211_close(void)
++@@ -434,6 +435,64 @@ out:
++ 	return idx;
++ }
++ 
+++static bool nl80211_is_ifname(const char *name);
+++
+++static int nl80211_radio_idx_from_uci(const char *name)
+++{
+++	struct uci_section *s;
+++	const char *opt;
+++	char *end;
+++	long radio;
+++	int idx = -1;
+++
+++	if (nl80211_is_ifname(name) || nl80211_phy_idx_from_phy(name) >= 0)
+++		return -1;
+++
+++	s = iwinfo_uci_get_radio(name, "mac80211");
+++	if (!s)
+++		goto out;
+++
+++	opt = uci_lookup_option_string(uci_ctx, s, "radio");
+++	if (!opt || !*opt)
+++		goto out;
+++
+++	radio = strtol(opt, &end, 10);
+++	if (!*end && radio >= 0 && radio < 32)
+++		idx = radio;
+++
+++out:
+++	iwinfo_uci_free();
+++	return idx;
+++}
+++
+++static int nl80211_band_from_uci(const char *name)
+++{
+++	struct uci_section *s;
+++	const char *opt;
+++	int band = 0;
+++
+++	s = iwinfo_uci_get_radio(name, "mac80211");
+++	if (!s)
+++		goto out;
+++
+++	opt = uci_lookup_option_string(uci_ctx, s, "band");
+++	if (!opt)
+++		goto out;
+++
+++	if (!strcmp(opt, "2g"))
+++		band = IWINFO_BAND_24;
+++	else if (!strcmp(opt, "5g"))
+++		band = IWINFO_BAND_5;
+++	else if (!strcmp(opt, "6g"))
+++		band = IWINFO_BAND_6;
+++	else if (!strcmp(opt, "60g"))
+++		band = IWINFO_BAND_60;
+++
+++out:
+++	iwinfo_uci_free();
+++	return band;
+++}
+++
++ static bool nl80211_is_ifname(const char *name)
++ {
++ 	struct stat st;
++@@ -811,9 +870,14 @@ nla_put_failure:
++ 	return NULL;
++ }
++ 
+++static int nl80211_get_if_data(const char *ifname,
+++	struct nl80211_if_data *data);
+++
++ static char * nl80211_phy2ifname(const char *ifname)
++ {
++-	int ifidx = -1, cifidx, lmode = 1, clmode, phyidx;
+++	int ifidx = -1, cifidx, lmode = 1, clmode, phyidx, radio_idx;
+++	uint32_t radio_mask = 0;
+++	struct nl80211_if_data data;
++ 	char buffer[512];
++ 	static char nif[IFNAMSIZ] = { 0 };
++ 	DIR *d;
++@@ -829,6 +893,10 @@ static char * nl80211_phy2ifname(const char *ifname)
++ 	if (phyidx < 0)
++ 		return NULL;
++ 
+++	radio_idx = nl80211_radio_idx_from_uci(ifname);
+++	if (radio_idx >= 0)
+++		radio_mask = BIT(radio_idx);
+++
++ 	memset(nif, 0, sizeof(nif));
++ 
++ 	if ((d = opendir("/sys/class/net")) != NULL)
++@@ -847,6 +915,11 @@ static char * nl80211_phy2ifname(const char *ifname)
++ 			if (cifidx < 0)
++ 				continue;
++ 
+++			if (radio_mask &&
+++			    (nl80211_get_if_data(e->d_name, &data) ||
+++			     !(data.radio_mask & radio_mask)))
+++				continue;
+++
++ 			snprintf(buffer, sizeof(buffer),
++ 			         "/sys/class/net/%s/link_mode", e->d_name);
++ 			clmode = nl80211_readint(buffer);
++@@ -889,6 +962,8 @@ static int nl80211_get_mode_cb(struct nl_msg *msg, void *arg)
++ 	if (tb[NL80211_ATTR_VIF_RADIO_MASK]) {
++ 		uint32_t mask = nla_get_u32(tb[NL80211_ATTR_VIF_RADIO_MASK]);
++ 
+++		data->radio_mask = mask;
+++
++ 		for (int i = 0; mask && i < 32; i++, mask >>= 1)
++ 			if (mask & 1)
++ 				data->radio_idx = i;
++@@ -902,10 +977,11 @@ static int nl80211_get_if_data(const char *ifname, struct nl80211_if_data *data)
++ {
++ 	char *res;
++ 
++-	res = nl80211_phy2ifname(ifname);
+++	res = nl80211_is_ifname(ifname) ? NULL : nl80211_phy2ifname(ifname);
++ 
++ 	data->mode = IWINFO_OPMODE_UNKNOWN;
++ 	data->radio_idx = -1;
+++	data->radio_mask = 0;
++ 	nl80211_request(res ? res : ifname, NL80211_CMD_GET_INTERFACE, 0,
++ 	                nl80211_get_mode_cb, data);
++ 
++@@ -1176,8 +1252,17 @@ static char * nl80211_ifadd(const char *ifname)
++ 	char path[PATH_MAX];
++ 	static char nif[IFNAMSIZ] = { 0 };
++ 	struct nl80211_msg_conveyor *req;
+++	struct nl80211_if_data data;
+++	uint32_t radio_mask = 0;
+++	int radio_idx;
++ 	FILE *sysfs;
++ 
+++	radio_idx = nl80211_radio_idx_from_uci(ifname);
+++	if (radio_idx >= 0)
+++		radio_mask = BIT(radio_idx);
+++	else if (!nl80211_get_if_data(ifname, &data))
+++		radio_mask = data.radio_mask;
+++
++ 	req = nl80211_msg(ifname, NL80211_CMD_NEW_INTERFACE, 0);
++ 	if (req)
++ 	{
++@@ -1185,8 +1270,11 @@ static char * nl80211_ifadd(const char *ifname)
++ 
++ 		NLA_PUT_STRING(req->msg, NL80211_ATTR_IFNAME, nif);
++ 		NLA_PUT_U32(req->msg, NL80211_ATTR_IFTYPE, NL80211_IFTYPE_STATION);
+++		if (radio_mask)
+++			NLA_PUT_U32(req->msg, NL80211_ATTR_VIF_RADIO_MASK, radio_mask);
++ 
++-		nl80211_send(req, NULL, NULL);
+++		if (nl80211_send(req, NULL, NULL))
+++			return NULL;
++ 
++ 		snprintf(path, sizeof(path) - 1,
++ 		         "/proc/sys/net/ipv6/conf/%s/disable_ipv6", nif);
++@@ -3217,11 +3305,17 @@ static int nl80211_get_scanlist(const char *ifname, char *buf, int *len)
++ 	return -1;
++ }
++ 
+++struct nl80211_freqlist {
+++	struct nl80211_array_buf arr;
+++	int band;
+++};
+++
++ static int nl80211_get_freqlist_cb(struct nl_msg *msg, void *arg)
++ {
++ 	int bands_remain, freqs_remain;
++ 
++-	struct nl80211_array_buf *arr = arg;
+++	struct nl80211_freqlist *list = arg;
+++	struct nl80211_array_buf *arr = &list->arr;
++ 	struct iwinfo_freqlist_entry *e;
++ 
++ 	struct nlattr **attr = nl80211_parse(msg);
++@@ -3235,6 +3329,11 @@ static int nl80211_get_freqlist_cb(struct nl_msg *msg, void *arg)
++ 	if (attr[NL80211_ATTR_WIPHY_BANDS]) {
++ 		nla_for_each_nested(band, attr[NL80211_ATTR_WIPHY_BANDS], bands_remain)
++ 		{
+++			int entry_band = nl80211_get_band(band->nla_type);
+++
+++			if (list->band && entry_band != list->band)
+++				continue;
+++
++ 			nla_parse(bands, NL80211_BAND_ATTR_MAX,
++ 				  nla_data(band), nla_len(band), NULL);
++ 
++@@ -3248,7 +3347,9 @@ static int nl80211_get_freqlist_cb(struct nl_msg *msg, void *arg)
++ 					    freqs[NL80211_FREQUENCY_ATTR_DISABLED])
++ 						continue;
++ 
++-					e->band = nl80211_get_band(band->nla_type);
+++					memset(e, 0, sizeof(*e));
+++
+++					e->band = entry_band;
++ 					e->mhz = nla_get_u32(freqs[NL80211_FREQUENCY_ATTR_FREQ]);
++ 					e->channel = nl80211_freq2channel(e->mhz);
++ 
++@@ -3288,20 +3389,25 @@ static int nl80211_get_freqlist_cb(struct nl_msg *msg, void *arg)
++ static int nl80211_get_freqlist(const char *ifname, char *buf, int *len)
++ {
++ 	struct nl80211_msg_conveyor *cv;
++-	struct nl80211_array_buf arr = { .buf = buf, .count = 0 };
+++	struct nl80211_freqlist list = {
+++		.arr = { .buf = buf, .count = 0 },
+++	};
++ 	uint32_t features = nl80211_get_protocol_features(ifname);
++ 	int flags;
++ 
+++	if (nl80211_radio_idx_from_uci(ifname) >= 0)
+++		list.band = nl80211_band_from_uci(ifname);
+++
++ 	flags = features & NL80211_PROTOCOL_FEATURE_SPLIT_WIPHY_DUMP ? NLM_F_DUMP : 0;
++ 	cv = nl80211_msg(ifname, NL80211_CMD_GET_WIPHY, flags);
++ 	if (!cv)
++ 		goto out;
++ 
++ 	NLA_PUT_FLAG(cv->msg, NL80211_ATTR_SPLIT_WIPHY_DUMP);
++-	if (nl80211_send(cv, nl80211_get_freqlist_cb, &arr))
+++	if (nl80211_send(cv, nl80211_get_freqlist_cb, &list))
++ 		goto out;
++ 
++-	*len = arr.count * sizeof(struct iwinfo_freqlist_entry);
+++	*len = list.arr.count * sizeof(struct iwinfo_freqlist_entry);
++ 	return 0;
++ 
++ nla_put_failure:
++@@ -3359,6 +3465,7 @@ struct nl80211_modes
++ 	uint32_t ht;
++ 
++ 	uint8_t bands;
+++	uint8_t band_filter;
++ 
++ 	uint16_t nl_ht;
++ 	uint32_t nl_vht;
++@@ -3366,6 +3473,22 @@ struct nl80211_modes
++ 	uint16_t eht_phy_cap[9];
++ };
++ 
+++static int nl80211_get_mode_band(const char *ifname)
+++{
+++	struct nl80211_if_data data;
+++	int freq;
+++
+++	if (nl80211_radio_idx_from_uci(ifname) >= 0)
+++		return nl80211_band_from_uci(ifname);
+++
+++	if (!nl80211_is_ifname(ifname) ||
+++	    nl80211_get_if_data(ifname, &data) || !data.radio_mask ||
+++	    nl80211_get_frequency(ifname, &freq))
+++		return 0;
+++
+++	return nl80211_freq2band(freq);
+++}
+++
++ static void nl80211_eval_modelist(struct nl80211_modes *m)
++ {
++ 	/* Treat any nonzero capability as 11n */
++@@ -3457,7 +3580,11 @@ static int nl80211_get_modelist_cb(struct nl_msg *msg, void *arg)
++ 	{
++ 		nla_for_each_nested(band, attr[NL80211_ATTR_WIPHY_BANDS], bands_remain)
++ 		{
++-			m->bands |= nl80211_get_band(band->nla_type);
+++			int current_band = nl80211_get_band(band->nla_type);
+++
+++			if (m->band_filter && current_band != m->band_filter)
+++				continue;
+++			m->bands |= current_band;
++ 
++ 			nla_parse(bands, NL80211_BAND_ATTR_MAX,
++ 			          nla_data(band), nla_len(band), NULL);
++@@ -3516,6 +3643,8 @@ static int nl80211_get_hwmodelist(const char *ifname, int *buf)
++ 	uint32_t features = nl80211_get_protocol_features(ifname);
++ 	int flags;
++ 
+++	m.band_filter = nl80211_get_mode_band(ifname);
+++
++ 	flags = features & NL80211_PROTOCOL_FEATURE_SPLIT_WIPHY_DUMP ? NLM_F_DUMP : 0;
++ 	cv = nl80211_msg(ifname, NL80211_CMD_GET_WIPHY, flags);
++ 	if (!cv)
++@@ -3651,6 +3780,8 @@ static int nl80211_get_htmodelist(const char *ifname, int *buf)
++ 	uint32_t features = nl80211_get_protocol_features(ifname);
++ 	int flags;
++ 
+++	m.band_filter = nl80211_get_mode_band(ifname);
+++
++ 	flags = features & NL80211_PROTOCOL_FEATURE_SPLIT_WIPHY_DUMP ? NLM_F_DUMP : 0;
++ 	cv = nl80211_msg(ifname, NL80211_CMD_GET_WIPHY, flags);
++ 	if (!cv)

@@ -1,0 +1,430 @@
+Subject: [PATCH] mediatek: integrate GL-MT3600BE network and board fixes
+
+Source: https://github.com/plcharriere/gl-mt3600be-openwrt/tree/92b668321f968b3bfe3b6a1de23317fe0f3f52ad
+Author: Paul-Louis Charriere and the authors credited in that tree.
+
+Adapt board defaults and userspace integration to OpenWrt 25.12.6.
+Keep the existing RTL8221B EEE workaround and local firmware settings.
+
+diff --git a/package/base-files/files/lib/functions/uci-defaults.sh b/package/base-files/files/lib/functions/uci-defaults.sh
+--- a/package/base-files/files/lib/functions/uci-defaults.sh
++++ b/package/base-files/files/lib/functions/uci-defaults.sh
+@@ -568,6 +568,10 @@
+ 	json_select ..
+ }
+ 
++ucidef_set_led_trigger() {
++	_ucidef_set_led_trigger "$1" "$2" "$3" "$4"
++}
++
+ ucidef_set_led_usbdev() {
+ 	local dev="$4"
+ 
+diff --git a/package/firmware/linux-firmware/mediatek.mk b/package/firmware/linux-firmware/mediatek.mk
+--- a/package/firmware/linux-firmware/mediatek.mk
++++ b/package/firmware/linux-firmware/mediatek.mk
+@@ -97,13 +97,23 @@
+ endef
+ $(eval $(call BuildPackage,mt7986-wo-firmware))
+ 
++# v7.3 (2026/02/25) from MediaTek's feed, until linux-firmware carries it
++define Download/mt7987-2p5g-phy-pmb
++  URL:=https://raw.githubusercontent.com/mediatek/mtk-openwrt-feeds/b888cb555b3104bb13ccd65679f3a343c2773636/feed/app/mt798x-2p5g-phy-firmware-internal/files/mt7987
++  URL_FILE:=i2p5ge-phy-pmb.bin
++  FILE:=mt7987-i2p5ge-phy-pmb-20260225.bin
++  HASH:=230f28cf9fa149cc9aff80ef26108d9f26a37509f894941efb5f39c2f008e085
++endef
++$(eval $(call Download,mt7987-2p5g-phy-pmb))
++
+ Package/mt7987-2p5g-phy-firmware = $(call Package/firmware-default,MT7987 built-in 2.5G Ethernet PHY firmware,,LICENCE.mediatek)
+ define Package/mt7987-2p5g-phy-firmware/install
+ 	$(INSTALL_DIR) $(1)/lib/firmware/mediatek/mt7987
+ 	$(INSTALL_DATA) \
+ 		$(PKG_BUILD_DIR)/mediatek/mt7987/i2p5ge-phy-DSPBitTb.bin \
+-		$(PKG_BUILD_DIR)/mediatek/mt7987/i2p5ge-phy-pmb.bin \
+ 		$(1)/lib/firmware/mediatek/mt7987
++	$(INSTALL_DATA) $(DL_DIR)/mt7987-i2p5ge-phy-pmb-20260225.bin \
++		$(1)/lib/firmware/mediatek/mt7987/i2p5ge-phy-pmb.bin
+ endef
+ $(eval $(call BuildPackage,mt7987-2p5g-phy-firmware))
+ 
+diff --git a/package/kernel/mt7996-wed-enable/Makefile b/package/kernel/mt7996-wed-enable/Makefile
+new file mode 100644
+--- /dev/null
++++ b/package/kernel/mt7996-wed-enable/Makefile
+@@ -0,0 +1,30 @@
++include $(TOPDIR)/rules.mk
++
++PKG_NAME:=mt7996-wed-enable
++PKG_RELEASE:=1
++PKG_LICENSE:=GPL-2.0-only
++
++include $(INCLUDE_DIR)/package.mk
++
++define Package/mt7996-wed-enable
++  SECTION:=firmware
++  CATEGORY:=Firmware
++  TITLE:=Enable MediaTek MT7996-family WED offload
++  DEPENDS:=@TARGET_mediatek_filogic +kmod-mt7996e
++endef
++
++define Package/mt7996-wed-enable/description
++ Enable the mt7996e WED data path at module load time. This package is
++ intended for device profiles whose WED hardware is supported by both the
++ Ethernet and Wi-Fi drivers.
++endef
++
++define Build/Compile
++endef
++
++define Package/mt7996-wed-enable/install
++	$(INSTALL_DIR) $(1)/etc/modules.d
++	$(INSTALL_DATA) ./files/99-mt7996e-wed $(1)/etc/modules.d/99-mt7996e-wed
++endef
++
++$(eval $(call BuildPackage,mt7996-wed-enable))
+diff --git a/package/kernel/mt7996-wed-enable/files/99-mt7996e-wed b/package/kernel/mt7996-wed-enable/files/99-mt7996e-wed
+new file mode 100644
+--- /dev/null
++++ b/package/kernel/mt7996-wed-enable/files/99-mt7996e-wed
+@@ -0,0 +1 @@
++mt7996e wed_enable=1
+diff --git a/package/network/config/netifd/files/usr/libexec/network/packet-steering.uc b/package/network/config/netifd/files/usr/libexec/network/packet-steering.uc
+--- a/package/network/config/netifd/files/usr/libexec/network/packet-steering.uc
++++ b/package/network/config/netifd/files/usr/libexec/network/packet-steering.uc
+@@ -57,6 +57,8 @@
+ 
+ function cpu_mask(cpu)
+ {
++	if (cpu == null)
++		return "0";
+ 	let mask;
+ 	if (cpu < 0)
+ 		mask = (1 << length(cpus)) - 1;
+@@ -231,7 +233,29 @@
+ 	}
+ }
+ 
++// With RSS, mtk_soc_eth runs one NAPI thread per RX ring in addition to the
++// TX one.  They are all named napi/mtk_eth-0, so they cannot be matched to RX
++// queues, and pinning them to one CPU undoes RSS.  The rings already spread
++// the flows over the CPUs: let the threads run on any CPU and leave RPS off.
++function assign_mtk_eth_rss_cpu(dev) {
++	let all = join(",", map(cpus, (cpu) => cpu.id));
++
++	for (let task in dev.tasks)
++		set_task_cpu(task, all);
++
++	for (let netdev in dev.netdev)
++		set_netdev_cpu(netdev, all_cpus ? -1 : null);
++
++	// Account the load as without RSS, so that the wireless devices keep
++	// their CPUs
++	dev.napi_cpu = get_next_cpu(napi_weight);
++	get_next_cpu(rx_weight, dev.napi_cpu);
++}
++
+ function assign_dev_cpu(dev) {
++	if (dev.driver == "mtk_soc_eth" && length(dev.tasks) > 2)
++		return assign_mtk_eth_rss_cpu(dev);
++
+ 	if (length(dev.rx_queues) > 1 &&
+ 		length(dev.rx_tasks) > 1)
+ 		return assign_dev_queues_cpu(dev);
+diff --git a/package/network/config/wifi-scripts/files-ucode/lib/netifd/wireless/mac80211.sh b/package/network/config/wifi-scripts/files-ucode/lib/netifd/wireless/mac80211.sh
+--- a/package/network/config/wifi-scripts/files-ucode/lib/netifd/wireless/mac80211.sh
++++ b/package/network/config/wifi-scripts/files-ucode/lib/netifd/wireless/mac80211.sh
+@@ -98,15 +98,23 @@
+ 	else
+ 		config.txpower = 'auto';
+ 
++	let radio = phy_suffix(config.radio, ' radio ');
++
+ 	log(`Configuring '${phy}' txantenna: ${config.txantenna}, rxantenna: ${config.rxantenna} distance: ${config.distance}`);
+-	system(`iw phy ${phy} set antenna ${config.txantenna} ${config.rxantenna}`);
+-	system(`iw phy ${phy} set distance ${config.distance}`);
+-	system(`iw phy ${phy} set txpower ${config.txpower}`);
++	system(`iw phy ${phy} set antenna ${config.txantenna} ${config.rxantenna}${radio}`);
++	system(`iw phy ${phy} set distance ${config.distance}${radio}`);
++	system(`iw phy ${phy} set txpower ${config.txpower}${radio}`);
+ 
+ 	if (config.frag)
+ 		system(`iw phy ${phy} set frag ${config.frag}`);
+-	if (config.rts)
+-		system(`iw phy ${phy} set rts ${config.rts}`);
++	// RTS off without the option, so that removing it takes effect;
++	// rts_threshold is set here, not by hostapd, which would set it for
++	// all radios of a phy with radios; -1 and 2347 or more mean off
++	let rts = config.rts || null;
++	if (rts == null && config.rts_threshold != null &&
++	    config.rts_threshold >= 0 && config.rts_threshold < 2347)
++		rts = config.rts_threshold;
++	system(`iw phy ${phy} set rts ${rts ?? 'off'}${radio}`);
+ }
+ 
+ function iw_htmode(config) {
+diff --git a/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/hostapd.uc b/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/hostapd.uc
+--- a/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/hostapd.uc
++++ b/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/hostapd.uc
+@@ -527,8 +527,8 @@
+ 	/* TX Power */
+ 	append_vars(config, [ 'min_tx_power' ]);
+ 
+-	/* hwmode, channel, op_class, ... */
+-	append_vars(config, [ 'hw_mode', 'channel', 'rts_threshold', 'chanlist' ]);
++	/* hwmode, channel, op_class, ...; mac80211.sh sets rts_threshold */
++	append_vars(config, [ 'hw_mode', 'channel', 'chanlist' ]);
+ 	if (config.hw_mode in [ 'a', 'g' ] && config.require_mode in [ 'n', 'ac', 'ax' ]) {
+ 		let require_mode = { n: 'require_ht', ac: 'require_vht', ax: 'require_he' };
+ 
+diff --git a/package/network/services/hostapd/src/src/utils/ucode.c b/package/network/services/hostapd/src/src/utils/ucode.c
+--- a/package/network/services/hostapd/src/src/utils/ucode.c
++++ b/package/network/services/hostapd/src/src/utils/ucode.c
+@@ -170,8 +170,13 @@
+ 	ucv_object_add(ret, "sec_channel", ucv_int64_new(sec_channel));
+ 	ucv_object_add(ret, "frequency", ucv_int64_new(freq_val));
+ 
+-	if (!sec_channel)
++	if (chanwidth == CONF_OPER_CHWIDTH_USE_HT) {
++		center_idx = freq_val < 3000 ? 0 : channel + 2 * sec_channel;
++		ucv_object_add(ret, "center_seg0_idx", ucv_int64_new(center_idx));
++		ucv_object_add(ret, "center_freq1",
++			       ucv_int64_new(freq_val + sec_channel * 10));
+ 		return ret;
++	}
+ 
+ 	if (freq_val >= 5900)
+ 		center_ofs = 0;
+diff --git a/target/linux/mediatek/dts/mt7987.dtsi b/target/linux/mediatek/dts/mt7987.dtsi
+--- a/target/linux/mediatek/dts/mt7987.dtsi
++++ b/target/linux/mediatek/dts/mt7987.dtsi
+@@ -1078,7 +1078,13 @@
+ 			interrupts = <GIC_SPI 196 IRQ_TYPE_LEVEL_HIGH>,
+ 				     <GIC_SPI 197 IRQ_TYPE_LEVEL_HIGH>,
+ 				     <GIC_SPI 198 IRQ_TYPE_LEVEL_HIGH>,
+-				     <GIC_SPI 199 IRQ_TYPE_LEVEL_HIGH>;
++				     <GIC_SPI 199 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 189 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 190 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 191 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 192 IRQ_TYPE_LEVEL_HIGH>;
++			interrupt-names = "fe0", "fe1", "fe2", "fe3", "pdma0",
++					  "pdma1", "pdma2", "pdma3";
+ 			clocks = <&ethsys CLK_ETHDMA_FE_EN>,
+ 				 <&ethsys CLK_ETHDMA_GP2_EN>,
+ 				 <&ethsys CLK_ETHDMA_GP1_EN>,
+diff --git a/target/linux/mediatek/dts/mt7987a-glinet-gl-mt3600be.dts b/target/linux/mediatek/dts/mt7987a-glinet-gl-mt3600be.dts
+--- a/target/linux/mediatek/dts/mt7987a-glinet-gl-mt3600be.dts
++++ b/target/linux/mediatek/dts/mt7987a-glinet-gl-mt3600be.dts
+@@ -16,9 +16,9 @@
+ 	aliases {
+ 		serial0 = &uart0;
+ 		label-mac-device = &gmac0;
+-		led-boot = &led_status_white;
++		led-boot = &led_status_blue;
+ 		led-failsafe = &led_status_blue;
+-		led-running = &led_status_blue;
++		led-running = &led_status_white;
+ 		led-upgrade = &led_status_blue;
+ 	};
+ 
+@@ -133,7 +133,8 @@
+ &pcie0 {
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pcie0_pins>;
+-	reset-gpios = <&pio 38 GPIO_ACTIVE_HIGH>;
++	wifi-reset-gpios = <&pio 38 GPIO_ACTIVE_LOW>;
++	wifi-reset-msleep = <100>;
+ 	status = "okay";
+ 
+ 	pcie@0,0 {
+diff --git a/target/linux/mediatek/filogic/base-files/etc/board.d/01_leds b/target/linux/mediatek/filogic/base-files/etc/board.d/01_leds
+--- a/target/linux/mediatek/filogic/base-files/etc/board.d/01_leds
++++ b/target/linux/mediatek/filogic/base-files/etc/board.d/01_leds
+@@ -104,6 +104,10 @@
+ 	;;
+ elecom,wrc-x3000gs3)
+ 	ucidef_set_led_netdev "wan" "wan" "green:wan" "wan"
++	;;
++glinet,gl-mt3600be)
++	ucidef_set_led_trigger "online" "online" "white:status" "online"
++	ucidef_set_led_trigger "offline" "offline" "blue:status" "offline"
+ 	;;
+ glinet,gl-x3000|\
+ glinet,gl-xe3000)
+diff --git a/target/linux/mediatek/filogic/base-files/etc/hotplug.d/iface/90-led-online b/target/linux/mediatek/filogic/base-files/etc/hotplug.d/iface/90-led-online
+new file mode 100644
+--- /dev/null
++++ b/target/linux/mediatek/filogic/base-files/etc/hotplug.d/iface/90-led-online
+@@ -0,0 +1,25 @@
++#!/bin/sh
++
++case "$ACTION" in
++ifup|ifdown|ifupdate) ;;
++*) exit 0 ;;
++esac
++
++/etc/init.d/led enabled || exit 0
++
++. /lib/functions.sh
++
++update_led() {
++	local sysfs trigger
++
++	config_get trigger "$1" trigger
++	case "$trigger" in
++	online|offline)
++		config_get sysfs "$1" sysfs
++		/etc/init.d/led start "$sysfs"
++		;;
++	esac
++}
++
++config_load system
++config_foreach update_led led
+diff --git a/target/linux/mediatek/filogic/base-files/etc/uci-defaults/10_gl-mt3600be-wifi-tx-burst b/target/linux/mediatek/filogic/base-files/etc/uci-defaults/10_gl-mt3600be-wifi-tx-burst
+new file mode 100644
+--- /dev/null
++++ b/target/linux/mediatek/filogic/base-files/etc/uci-defaults/10_gl-mt3600be-wifi-tx-burst
+@@ -0,0 +1,26 @@
++. /lib/functions.sh
++
++[ "$(board_name)" = "glinet,gl-mt3600be" ] || exit 0
++
++tx_burst_changed=0
++
++set_5ghz_tx_burst() {
++	local section="$1"
++	local band burst
++
++	config_get band "$section" band
++	[ "$band" = "5g" ] || return
++
++	config_get burst "$section" tx_queue_data2_burst
++	[ -n "$burst" ] && return
++
++	uci set "wireless.${section}.tx_queue_data2_burst=4.0" || exit 1
++	tx_burst_changed=1
++}
++
++config_load wireless
++config_foreach set_5ghz_tx_burst wifi-device
++
++[ "$tx_burst_changed" -eq 0 ] || uci commit wireless || exit 1
++
++exit 0
+diff --git a/target/linux/mediatek/filogic/base-files/etc/uci-defaults/11_gl-mt3600be-dns-dscp b/target/linux/mediatek/filogic/base-files/etc/uci-defaults/11_gl-mt3600be-dns-dscp
+new file mode 100644
+--- /dev/null
++++ b/target/linux/mediatek/filogic/base-files/etc/uci-defaults/11_gl-mt3600be-dns-dscp
+@@ -0,0 +1,29 @@
++. /lib/functions.sh
++
++[ "$(board_name)" = "glinet,gl-mt3600be" ] || exit 0
++
++dns_rule_found=0
++
++find_dns_rule() {
++	local name
++
++	config_get name "$1" name
++	[ "$name" = "DNS-answers-VI" ] && dns_rule_found=1
++}
++
++config_load firewall
++config_foreach find_dns_rule rule
++
++[ "$dns_rule_found" -eq 0 ] || exit 0
++
++uci -q batch > /dev/null <<-EOT
++	add firewall rule
++	set firewall.@rule[-1].name='DNS-answers-VI'
++	set firewall.@rule[-1].proto='tcp udp'
++	set firewall.@rule[-1].src_port='53'
++	set firewall.@rule[-1].target='DSCP'
++	set firewall.@rule[-1].set_dscp='CS5'
++	commit firewall
++EOT
++
++exit $?
+diff --git a/target/linux/mediatek/filogic/base-files/etc/uci-defaults/12_gl-mt3600be-flow-offload b/target/linux/mediatek/filogic/base-files/etc/uci-defaults/12_gl-mt3600be-flow-offload
+new file mode 100644
+--- /dev/null
++++ b/target/linux/mediatek/filogic/base-files/etc/uci-defaults/12_gl-mt3600be-flow-offload
+@@ -0,0 +1,16 @@
++. /lib/functions.sh
++
++[ "$(board_name)" = "glinet,gl-mt3600be" ] || exit 0
++
++# keep any flow offloading setting, and SQM, which hardware offloading bypasses
++[ -z "$(uci -q get firewall.@defaults[0].flow_offloading)" ] || exit 0
++[ -z "$(uci -q get firewall.@defaults[0].flow_offloading_hw)" ] || exit 0
++uci -q show sqm | grep -q "\.enabled='1'$" && exit 0
++
++uci -q batch <<-EOT
++	set firewall.@defaults[0].flow_offloading='1'
++	set firewall.@defaults[0].flow_offloading_hw='1'
++	commit firewall
++EOT
++
++exit $?
+diff --git a/target/linux/mediatek/filogic/base-files/usr/libexec/led-trigger/offline b/target/linux/mediatek/filogic/base-files/usr/libexec/led-trigger/offline
+new file mode 100644
+--- /dev/null
++++ b/target/linux/mediatek/filogic/base-files/usr/libexec/led-trigger/offline
+@@ -0,0 +1,5 @@
++#!/bin/sh
++
++# Blink the LED while the router has no default route, see online.
++
++. /usr/libexec/led-trigger/online
+diff --git a/target/linux/mediatek/filogic/base-files/usr/libexec/led-trigger/online b/target/linux/mediatek/filogic/base-files/usr/libexec/led-trigger/online
+new file mode 100644
+--- /dev/null
++++ b/target/linux/mediatek/filogic/base-files/usr/libexec/led-trigger/online
+@@ -0,0 +1,22 @@
++#!/bin/sh
++
++# Light the LED while the router has a default route. With the offline
++# trigger, blink it while the router has none. The iface hotplug script
++# 90-led-online applies this again when an interface changes.
++
++. /lib/functions/leds.sh
++. /lib/functions/network.sh
++
++network_flush_cache
++
++if network_find_wan led_wan || network_find_wan6 led_wan; then
++	case "$trigger" in
++	online) led_on "$sysfs" ;;
++	offline) led_off "$sysfs" ;;
++	esac
++else
++	case "$trigger" in
++	online) led_off "$sysfs" ;;
++	offline) led_timer "$sysfs" 500 500 ;;
++	esac
++fi
+diff --git a/target/linux/mediatek/image/filogic.mk b/target/linux/mediatek/image/filogic.mk
+--- a/target/linux/mediatek/image/filogic.mk
++++ b/target/linux/mediatek/image/filogic.mk
+@@ -1733,7 +1733,7 @@
+   DEVICE_DTS := mt7987a-glinet-gl-mt3600be
+   DEVICE_DTS_DIR := ../dts
+   DEVICE_PACKAGES := mt7987-2p5g-phy-firmware kmod-mt7990-firmware \
+-	kmod-hwmon-pwmfan kmod-usb3
++	kmod-hwmon-pwmfan kmod-usb3 mt7996-wed-enable libiwinfo
+   KERNEL = kernel-bin | lzma | \
+ 	fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb
+   KERNEL_INITRAMFS = kernel-bin | lzma | \
+@@ -1741,8 +1741,8 @@
+   KERNEL_IN_UBI := 1
+   KERNEL_LOADADDR := 0x40000000
+   UBINIZE_OPTS := -E 5
+-  BLOCKSIZE := 128k
+-  PAGESIZE := 2048
++  BLOCKSIZE := 256k
++  PAGESIZE := 4096
+   IMAGE_SIZE := 483328k
+   IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+ endef

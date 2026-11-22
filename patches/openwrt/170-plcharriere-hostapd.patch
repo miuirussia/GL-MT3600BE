@@ -1,0 +1,319 @@
+Subject: [PATCH] hostapd: install the GL-MT3600BE backport series
+
+Source: https://github.com/plcharriere/gl-mt3600be-openwrt/tree/92b668321f968b3bfe3b6a1de23317fe0f3f52ad
+
+diff --git a/package/network/services/hostapd/patches/9999-routerfw-plcharriere.patch b/package/network/services/hostapd/patches/9999-routerfw-plcharriere.patch
+new file mode 100644
+--- /dev/null
++++ b/package/network/services/hostapd/patches/9999-routerfw-plcharriere.patch
+@@ -0,0 +1,310 @@
++Subject: [PATCH] hostapd: backport GL-MT3600BE fixes to OpenWrt 25.12.6
++
++Source: https://github.com/plcharriere/gl-mt3600be-openwrt/tree/92b668321f968b3bfe3b6a1de23317fe0f3f52ad
++
++Adapted for Linux 6.12.112 and the package revisions in openwrt.lock.json.
++Original patch inventory and authors: patches/plcharriere.json and patches/README.md.
++
++Original authors/sign-offs:
++  Assisted-by: Claude:claude-opus-5-5
++  From: Brandon Arrendondo <brandon.arrendondo@bissell.com>
++  From: Jouni Malinen <jouni.malinen@oss.qualcomm.com>
++  From: Manish Dharanenthiran <manish.dharanenthiran@oss.qualcomm.com>
++  From: Michael-CY Lee <michael-cy.lee@mediatek.com>
++  From: Paul-Louis Charrière <plcharriere@gmail.com>
++  Signed-off-by: Brandon Arrendondo <brandon.arrendondo@bissell.com>
++  Signed-off-by: Jouni Malinen <jouni.malinen@oss.qualcomm.com>
++  Signed-off-by: Manish Dharanenthiran <manish.dharanenthiran@oss.qualcomm.com>
++  Signed-off-by: Michael-CY Lee <michael-cy.lee@mediatek.com>
++  Signed-off-by: Paul-Louis Charrière <plcharriere@gmail.com>
++
++diff --git a/src/ap/dfs.c b/src/ap/dfs.c
++index b261824..52a12e1 100644
++--- a/src/ap/dfs.c
+++++ b/src/ap/dfs.c
++@@ -969,6 +969,39 @@ int hostapd_handle_dfs(struct hostapd_iface *iface)
++ }
++ 
++ 
+++/*
+++ * The kernel refused a channel whose CAC was skipped, because the CAC result
+++ * expired after the channel list was read. Run a new CAC instead.
+++ */
+++int hostapd_dfs_restart_cac(struct hostapd_iface *iface)
+++{
+++	struct hostapd_channel_data *channel;
+++	int n_chans, n_chans1, start_chan_idx, start_chan_idx1, i;
+++
+++	if ((iface->drv_flags & WPA_DRIVER_FLAGS_DFS_OFFLOAD) ||
+++	    hostapd_is_dfs_required(iface) <= 0 ||
+++	    !hostapd_is_dfs_chan_available(iface))
+++		return -1;
+++
+++	start_chan_idx = dfs_get_start_chan_idx(iface, &start_chan_idx1);
+++	if (start_chan_idx == -1)
+++		return -1;
+++
+++	n_chans = dfs_get_used_n_chans(iface, &n_chans1);
+++
+++	wpa_printf(MSG_INFO, "DFS: CAC result expired, running a new CAC");
+++
+++	for (i = 0; i < n_chans; i++) {
+++		channel = &iface->current_mode->channels[start_chan_idx + i];
+++		if (channel->flag & HOSTAPD_CHAN_RADAR)
+++			set_dfs_state_freq(iface, channel->freq,
+++					   HOSTAPD_CHAN_DFS_USABLE);
+++	}
+++
+++	return hostapd_handle_dfs(iface);
+++}
+++
+++
++ int hostapd_is_dfs_chan_available(struct hostapd_iface *iface)
++ {
++ 	int n_chans, n_chans1, start_chan_idx, start_chan_idx1;
++diff --git a/src/ap/dfs.h b/src/ap/dfs.h
++index 606c1b3..b5722cd 100644
++--- a/src/ap/dfs.h
+++++ b/src/ap/dfs.h
++@@ -10,6 +10,7 @@
++ #define DFS_H
++ 
++ int hostapd_handle_dfs(struct hostapd_iface *iface);
+++int hostapd_dfs_restart_cac(struct hostapd_iface *iface);
++ 
++ int hostapd_dfs_complete_cac(struct hostapd_iface *iface, int success, int freq,
++ 			     int ht_enabled, int chan_offset, int chan_width,
++diff --git a/src/ap/hostapd.c b/src/ap/hostapd.c
++index 10f63c0..687a0af 100644
++--- a/src/ap/hostapd.c
+++++ b/src/ap/hostapd.c
++@@ -2665,6 +2665,8 @@ static int hostapd_setup_interface_complete_sync(struct hostapd_iface *iface,
++ 					     hapd->iconf),
++ 				     hostapd_get_oper_centr_freq_seg1_idx(
++ 					     hapd->iconf))) {
+++			if (hostapd_dfs_restart_cac(iface) == 0)
+++				return 0;
++ 			wpa_printf(MSG_ERROR, "Could not set channel for "
++ 				   "kernel driver");
++ 			goto fail;
++diff --git a/src/ap/ieee802_11.c b/src/ap/ieee802_11.c
++index 42f5e5b..f5aac27 100644
++--- a/src/ap/ieee802_11.c
+++++ b/src/ap/ieee802_11.c
++@@ -5202,6 +5202,7 @@ static int add_associated_sta(struct hostapd_data *hapd,
++ 	     (!wpa_auth_sta_ft_tk_already_set(sta->wpa_sm) &&
++ 	      !wpa_auth_sta_fils_tk_already_set(sta->wpa_sm)) ||
++ 	     (!reassoc && (sta->flags & WLAN_STA_AUTHORIZED)))) {
+++		ap_sta_set_authorized(hapd, sta, 0);
++ 		hostapd_drv_sta_remove(hapd, sta->addr);
++ 		wpa_auth_sm_event(sta->wpa_sm, WPA_DRV_STA_REMOVED);
++ 		set = 0;
++diff --git a/src/ap/ieee802_11_eht.c b/src/ap/ieee802_11_eht.c
++index 6d61f61..5e118f9 100644
++--- a/src/ap/ieee802_11_eht.c
+++++ b/src/ap/ieee802_11_eht.c
++@@ -2222,7 +2222,7 @@ hostapd_parse_link_reconf_req_sta_profile(struct hostapd_data *hapd,
++ 	sta_info_len += nstr_bitmap_size;
++ 
++ 	sta_info = per_sta_prof->variable;
++-	if (*sta_info > end - sta_info) {
+++	if (sta_info >= end || *sta_info > end - sta_info) {
++ 		wpa_printf(MSG_DEBUG, "MLD: Not enough room for STA Info");
++ 		goto out;
++ 	}
++diff --git a/src/ap/ieee802_11_he.c b/src/ap/ieee802_11_he.c
++index cc731b9..cbf3d51 100644
++--- a/src/ap/ieee802_11_he.c
+++++ b/src/ap/ieee802_11_he.c
++@@ -426,6 +426,7 @@ void hostapd_get_he_capab(struct hostapd_data *hapd,
++ 
++ 
++ static int check_valid_he_mcs(struct hostapd_data *hapd, const u8 *sta_he_capab,
+++			      size_t sta_he_capab_len,
++ 			      enum ieee80211_op_mode opmode)
++ {
++ 	u16 sta_rx_mcs_set, ap_tx_mcs_set;
++@@ -460,6 +461,16 @@ static int check_valid_he_mcs(struct hostapd_data *hapd, const u8 *sta_he_capab,
++ 	for (i = 0; i < mcs_count; i++) {
++ 		int j;
++ 
+++		/* mcs_count (and hence the highest i reached here) is
+++		 * derived from the AP's own configured operating channel
+++		 * width, not from anything the STA guarantees about the
+++		 * length of its HE Capabilities element. Stop before
+++		 * reading an MCS map field the STA's element is too short
+++		 * to actually contain. */
+++		if ((size_t) (IEEE80211_HE_CAPAB_MIN_LEN + (i + 1) * 4) >
+++		    sta_he_capab_len)
+++			break;
+++
++ 		/* AP Tx MCS map vs. STA Rx MCS map */
++ 		sta_rx_mcs_set = WPA_GET_LE16((const u8 *) &sta_mcs_set[i * 2]);
++ 		ap_tx_mcs_set = WPA_GET_LE16((const u8 *)
++@@ -489,7 +500,7 @@ u16 copy_sta_he_capab(struct hostapd_data *hapd, struct sta_info *sta,
++ {
++ 	if (!he_capab || !(sta->flags & WLAN_STA_WMM) ||
++ 	    !hapd->iconf->ieee80211ax || hapd->conf->disable_11ax ||
++-	    !check_valid_he_mcs(hapd, he_capab, opmode) ||
+++	    !check_valid_he_mcs(hapd, he_capab, he_capab_len, opmode) ||
++ 	    ieee80211_invalid_he_cap_size(he_capab, he_capab_len) ||
++ 	    he_capab_len > sizeof(struct ieee80211_he_capabilities)) {
++ 		sta->flags &= ~WLAN_STA_HE;
++diff --git a/src/ap/wpa_auth_ft.c b/src/ap/wpa_auth_ft.c
++index d5400a9..e1d2406 100644
++--- a/src/ap/wpa_auth_ft.c
+++++ b/src/ap/wpa_auth_ft.c
++@@ -2423,7 +2423,7 @@ static u8 * wpa_ft_process_rdie(struct wpa_state_machine *sm,
++ 	wpa_hexdump(MSG_MSGDUMP, "FT: Resource descriptor IE(s)",
++ 		    ies, ies_len);
++ 
++-	if (end - pos < (int) sizeof(*rdie)) {
+++	if (end - pos < 2 + (int) sizeof(*rdie)) {
++ 		wpa_printf(MSG_ERROR, "FT: Not enough room for response RDIE");
++ 		return pos;
++ 	}
++diff --git a/src/common/sae.c b/src/common/sae.c
++index 8bcbda4..e1fec57 100644
++--- a/src/common/sae.c
+++++ b/src/common/sae.c
++@@ -2386,8 +2386,12 @@ int sae_write_confirm(struct sae_data *sae, struct wpabuf *buf)
++ 	size_t hash_len;
++ 	int res;
++ 
++-	if (sae->tmp == NULL)
+++	if (!sae->tmp || !sae->tmp->own_commit_scalar ||
+++	    !sae->peer_commit_scalar) {
+++		wpa_printf(MSG_INFO, "%s: No own/peer scalar available",
+++			   __func__);
++ 		return -1;
+++	}
++ 
++ 	hash_len = sae->tmp->kck_len;
++ 
++diff --git a/src/drivers/driver_nl80211.c b/src/drivers/driver_nl80211.c
++index a15671f..2cab931 100644
++--- a/src/drivers/driver_nl80211.c
+++++ b/src/drivers/driver_nl80211.c
++@@ -9787,10 +9787,17 @@ fail:
++ }
++ 
++ 
++-void nl80211_update_active_links(struct i802_bss *bss, int link_id)
+++void nl80211_update_active_links(struct i802_bss *bss, int link_id,
+++				 bool set_active_links)
++ {
++-	wpa_printf(MSG_DEBUG, "nl80211: Update link (ifindex=%d link_id=%u)",
++-		   bss->ifindex, link_id);
+++	wpa_printf(MSG_DEBUG, "nl80211: Update link (ifindex=%d link_id=%u %s)",
+++		   bss->ifindex, link_id,
+++		   set_active_links ? "START_AP" : "STOP_AP");
+++
+++	if (set_active_links) {
+++		bss->active_links |= BIT(link_id);
+++		return;
+++	}
++ 
++ 	if (!(bss->active_links & BIT(link_id))) {
++ 		wpa_printf(MSG_DEBUG,
++@@ -9831,7 +9838,7 @@ int nl80211_remove_link(struct i802_bss *bss, int link_id)
++ 
++ 	eloop_cancel_timeout(wpa_driver_nl80211_scan_timeout, drv, bss->ctx);
++ 	/* Clear the active links and set the flink */
++-	nl80211_update_active_links(bss, link_id);
+++	nl80211_update_active_links(bss, link_id, false);
++ 	bss->valid_links &= ~BIT(link_id);
++ 
++ 	if (bss->scan_link == link)
++diff --git a/src/drivers/driver_nl80211.h b/src/drivers/driver_nl80211.h
++index a40b749..0cb1750 100644
++--- a/src/drivers/driver_nl80211.h
+++++ b/src/drivers/driver_nl80211.h
++@@ -371,7 +371,8 @@ void nl80211_restore_ap_mode(struct i802_bss *bss);
++ struct i802_link * nl80211_get_link(struct i802_bss *bss, s8 link_id);
++ u8 nl80211_get_link_id_from_link(struct i802_bss *bss, struct i802_link *link);
++ int nl80211_remove_link(struct i802_bss *bss, int link_id);
++-void nl80211_update_active_links(struct i802_bss *bss, int link_id);
+++void nl80211_update_active_links(struct i802_bss *bss, int link_id,
+++				 bool set_active_links);
++ 
++ static inline bool nl80211_link_valid(u16 links, s8 link_id)
++ {
++diff --git a/src/drivers/driver_nl80211_event.c b/src/drivers/driver_nl80211_event.c
++index 515d904..c772928 100644
++--- a/src/drivers/driver_nl80211_event.c
+++++ b/src/drivers/driver_nl80211_event.c
++@@ -2499,7 +2499,7 @@ static void nl80211_pmksa_candidate_event(struct wpa_driver_nl80211_data *drv,
++ }
++ 
++ 
++-static void nl80211_client_probe_event(struct wpa_driver_nl80211_data *drv,
+++static void nl80211_client_probe_event(struct i802_bss *bss,
++ 				       struct nlattr **tb)
++ {
++ 	union wpa_event_data data;
++@@ -2520,7 +2520,7 @@ static void nl80211_client_probe_event(struct wpa_driver_nl80211_data *drv,
++ 
++ 	os_memset(&data, 0, sizeof(data));
++ 	os_memcpy(data.client_poll.addr, addr, ETH_ALEN);
++-	wpa_supplicant_event(drv->ctx, EVENT_DRIVER_CLIENT_POLL_OK, &data);
+++	wpa_supplicant_event(bss->ctx, EVENT_DRIVER_CLIENT_POLL_OK, &data);
++ }
++ 
++ 
++@@ -2588,7 +2588,7 @@ static void nl80211_stop_ap(struct i802_bss *bss, struct nlattr **tb)
++ 		ctx = mld_link->ctx;
++ 
++ 		/* Bring down the active link */
++-		nl80211_update_active_links(bss, link_id);
+++		nl80211_update_active_links(bss, link_id, false);
++ 	}
++ 
++ 	wpa_supplicant_event(ctx, EVENT_INTERFACE_UNAVAILABLE, NULL);
++@@ -4136,6 +4136,28 @@ static void nl80211_obss_color_event(struct i802_bss *bss,
++ #endif /* CONFIG_IEEE80211AX */
++ 
++ 
+++static void nl80211_start_ap(struct i802_bss *bss, struct nlattr **tb)
+++{
+++	int link_id;
+++
+++	if (!tb[NL80211_ATTR_MLO_LINK_ID])
+++		return;
+++
+++	link_id = nla_get_u8(tb[NL80211_ATTR_MLO_LINK_ID]);
+++	if (!nl80211_link_valid(bss->valid_links, link_id)) {
+++		wpa_printf(MSG_DEBUG,
+++			   "nl80211: Ignoring START_AP event for invalid link ID %d (valid: 0x%04x)",
+++			   link_id, bss->valid_links);
+++		return;
+++	}
+++
+++	wpa_printf(MSG_DEBUG, "nl80211: START_AP event on link %d", link_id);
+++
+++	/* Update the active link */
+++	nl80211_update_active_links(bss, link_id, true);
+++}
+++
+++
++ static void do_process_drv_event(struct i802_bss *bss, int cmd,
++ 				 struct nlattr **tb)
++ {
++@@ -4338,7 +4360,7 @@ static void do_process_drv_event(struct i802_bss *bss, int cmd,
++ 		nl80211_pmksa_candidate_event(drv, tb);
++ 		break;
++ 	case NL80211_CMD_PROBE_CLIENT:
++-		nl80211_client_probe_event(drv, tb);
+++		nl80211_client_probe_event(bss, tb);
++ 		break;
++ 	case NL80211_CMD_TDLS_OPER:
++ 		nl80211_tdls_oper_event(drv, tb);
++@@ -4405,6 +4427,9 @@ static void do_process_drv_event(struct i802_bss *bss, int cmd,
++ 	case NL80211_CMD_ASSOC_MLO_RECONF:
++ 		mlme_event_link_addition(drv, nla_data(frame), nla_len(frame));
++ 		break;
+++	case NL80211_CMD_START_AP:
+++		nl80211_start_ap(bss, tb);
+++		break;
++ 	default:
++ 		wpa_dbg(drv->ctx, MSG_DEBUG, "nl80211: Ignored unknown event "
++ 			"(cmd=%d)", cmd);

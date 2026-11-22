@@ -1,0 +1,699 @@
+{
+  "repository": "https://github.com/plcharriere/gl-mt3600be-openwrt",
+  "commit": "92b668321f968b3bfe3b6a1de23317fe0f3f52ad",
+  "upstream_base": "89e69d9391d79e0bb72d567cf6360ad4967a6fc5",
+  "openwrt_commit": "64900e756efa667774214f9c6b17c113222e01f7",
+  "patches": [
+    {
+      "source": "target/linux/generic/backport-6.18/707-v7.3-net-phylink-initialise-link_state-before-a-forced-major-config.patch",
+      "sha256": "4df138e25407b78bbb3bc7b1114cba590754c5be1d70784a9c3858ecd0944c91",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/generic/pending-6.18/708-netfilter-flowtable-fetch-hardware-counters-before-r.patch",
+      "sha256": "9832aed275e05555227de8216f799c584987c4e4a0ef83f39968b0ba3b392c65",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/generic/pending-6.18/736-06-net-ethernet-mediatek-preserve-sibling-ppe-bindings.patch",
+      "sha256": "51690007c48b609264137d8d3c44a2b646f03e7ddf11e90cbef9983884bb158a",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/742-net-pcs-mtk-lynxi-correct-power-down-setting.patch",
+      "sha256": "4905489c6b4e16f86b46d13ed88696667df412dc8465ec85d5ab439f7c53de2f",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/753-net-ethernet-mtk_eth_soc-add-XGMAC-v2-link-control.patch",
+      "sha256": "e75c6843b15e85b499e3ce0d677fd357e5a98bcaa74737f4efe54e9b2c9cfd18",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/754-net-ethernet-mtk_eth_soc-fix-MT7987-MDC-divider.patch",
+      "sha256": "4d59adf45566a6f15dcb5120666c7f92442e3f9d72b092490eafedeb6bfb623b",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/755-net-ethernet-mtk_eth_soc-fix-spurious-MDIO-timeout.patch",
+      "sha256": "86dace9e85392990918c5a31ec0d83b70b01b25847bb8e15d34b0b1070d54ad0",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/756-net-ethernet-mtk_eth_soc-fix-page-pool-error-leak.patch",
+      "sha256": "61961a14edb735e6c541126deb5852853e26b3f67bf4d915cbf66f4bb6f6f205",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/758-net-ethernet-mtk_eth_soc-initialize-PPE-flow-table-once.patch",
+      "sha256": "94eed5a1a0f9a1ad737e169918f74d80565ba39899f45553d35fc8c094b81c9a",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/759-net-phy-mtk-2p5ge-serialize-MT7987-firmware-loading.patch",
+      "sha256": "e5d38ae579ea9c16cbadd0cdd6086b75e7251b9b14dfb23ec7afeb55eaa407ad",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/760-net-ethernet-mtk_eth_soc-use-XMAC-v2-counters.patch",
+      "sha256": "eb97f93cdc12be3182a61ce1d6e2dd203c1e9ed44f45a8d22621932766b0fe2e",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/761-net-ethernet-mtk_ppe-fix-MIB-cache-enable.patch",
+      "sha256": "6302a481196740ee82a0dbd67cba15617c95dfd872b32dc575a7a403f6d3a4b7",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/762-net-ethernet-mtk_eth_soc-use-per-MAC-SGMII-syscfg0-mask.patch",
+      "sha256": "10733db157639e1a53c03245fa2e354e067c906d118c9b87e5aa59b5a956b67e",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/763-net-ethernet-mtk_eth_soc-release-PPE-tables-on-remove.patch",
+      "sha256": "f6edce262425431983c510f44f00b19c62a496208eb79c7346d05fc8d71f0815",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/764-net-ethernet-mtk_ppe-remove-debugfs-on-deinit.patch",
+      "sha256": "cf66d774c79a69edf8aeddf5a59a91ef9e95943f192b210fcc0ffe4a4deb54de",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/765-net-ethernet-mtk_eth_soc-order-driver-removal.patch",
+      "sha256": "4d1571a9a2ee0d19c97beb219aa9cf1bf4ed916d53c7ca6dbe35edf72071640d",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/766-net-ethernet-mtk_ppe-change-TCP-UDP-aging-out-time.patch",
+      "sha256": "f89f6287c1bc120d34ba58d12acc41e628ae36f64aac5e4125a46e67b37d06cb",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/767-netfilter-nf_flow_table-tear-down-flows-on-bridge-FDB-moves.patch",
+      "sha256": "8b0adec01217146ab7b20dd1a5b6879cd03f0e2635004489a227e6fdb95035c5",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/768-netfilter-nf_flow_table-remove-hardware-flows-before-unbinding.patch",
+      "sha256": "eeb1c5d331eee9b586c9bc43a996f3d5f7c16729cca9daf4b0baabc5cc53049e",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/769-netfilter-flowtable-flush-delete-work-after-final-GC.patch",
+      "sha256": "51d66e41378e9410a21f9d7778935908d79f798321d8149441dd7b01ed66e635",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/770-net-ethernet-mtk_ppe-bind-flows-from-their-first-packets.patch",
+      "sha256": "7f833b46aa0bb979efa56b0e09fed65b424cacb0887ed1c6e51a6c3527c353f5",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/772-net-ethernet-mtk_eth_soc-fix-netdev-notifier-lifetime.patch",
+      "sha256": "19472f0db93259974956119d79addbbda37ad15e332daa1657ddbc7414523251",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/773-net-ethernet-mtk_eth_soc-update-SYSCFG0-bits-atomically.patch",
+      "sha256": "9c9a3abcefdbc60ad10e938820b01c8ee0070cd8204baa62de37be791eacf940",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/774-net-ethernet-mtk_eth_soc-remove-netsys-v1-restriction-for-small-frag-check.patch",
+      "sha256": "3c61fb41605c14201ee4004e8c89731008c2c1883cc96d634852b7d623d6995c",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/947-net-ethernet-mtk_wed-add-MT7987-WED-3.1-support.patch",
+      "sha256": "e4bc5c9bce8f5db765446a06864984ad6701af8943dcb5396811aea909f0d810",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/948-net-ethernet-mtk_wed-stabilize-reset-recovery.patch",
+      "sha256": "972342f53190c7ede3c727fff6505764291e0f74801aaf67511a61cadb6c8a7b",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/949-net-ethernet-mtk_wed-avoid-v31-token-status-false-alarm.patch",
+      "sha256": "d2e04cd0db41a1cb0ce6d27b8e4dc922b2a4cb50ca3f10d379562549312c578c",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/952-net-ethernet-mtk_wed-refactor-WDMA-init-to-avoid-double-init.patch",
+      "sha256": "60f8a56235d436063508441e2668ca0df79d64f19fe434c160beb94e74660db1",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/953-net-ethernet-mtk_wed-shorten-busy-poll.patch",
+      "sha256": "485abfb9124b63e9d9148ffe5690da065fd6e14c44603387fc542b7790f55d96",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/954-net-ethernet-mtk_wed-fix-A-MSDU-buffer-leaks.patch",
+      "sha256": "b4fdb58a9dc2e48fcfe6f67a926a5263a93a20d80fb244b2314b917b8ff31ea9",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/956-net-ethernet-mtk_eth_soc-handle-PSE-port-link-state.patch",
+      "sha256": "4251fcde5a51533fc7d9edefc313577a58f0e79cc57c94f5990aff7b139d17ec",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/957-net-ethernet-mtk_eth_soc-add-MT7987-misc-error-IRQ.patch",
+      "sha256": "972d8019cf8ffba0d2e6de1cc0fef8521573cdf2af5a730d02d0e2a62cc26934",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/958-net-ethernet-mtk_wed-flush-PPE-entries-of-removed-stations.patch",
+      "sha256": "dd83f710d4889828a60ff0f08197bd1f27b2995a52aa9b915243e56b393874d0",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/959-net-ethernet-mtk_ppe-show-WDMA-target-in-debugfs.patch",
+      "sha256": "a24e4633c0abc0d51d1ff53fa19ce3becb6b98afbdfc9080ac7055aedd1cfde1",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/962-net-ethernet-mtk_wed-debugfs-fix-the-HIFTXD-MSDU-counter-offsets.patch",
+      "sha256": "20fd0c68c5bafd828089923e1c05712dcb9c3ed2fd6308e28c5c602e6cb67cd2",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/963-net-ethernet-mtk_wed-size-the-TX-buffer-pool-from-the-token-count.patch",
+      "sha256": "ccdcda8c281b70fad9f4d9d27dd728034b9035d5e6f8cad373310940c282e6eb",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/980-net-ethernet-mtk_eth_soc-add-register-definitions-for-RSS-and-LRO.patch",
+      "sha256": "bfffe15d21b6284e50cd22b7fd0c1ad763d8c5e1c104ef10e409eec8ee14bd35",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/981-net-ethernet-mtk_eth_soc-add-RSS-support.patch",
+      "sha256": "55b3cb442154c0bd7c32afc4b09b2a9310c69ea8ae25dbdb1580574fa10d2878",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/982-net-ethernet-mtk_eth_soc-enable-RSS-on-MT7987.patch",
+      "sha256": "49b0f673a0e438467f9db805fb05a934e8a80eb412fff8c769199d125151006c",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/983-net-ethernet-mtk_eth_soc-read-XMAC-v2-counters-before-they-wrap.patch",
+      "sha256": "2eada16d47228b76f392b673202621d2058ade6937d0b4125068352e7ae9e481",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/984-net-ethernet-mtk_ppe-bypass-QDMA-between-ports-without-a-switch.patch",
+      "sha256": "77b89ea090c3495f88222168383395a0e78faab8e2a0805ae0325e010e4b2481",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/985-net-ethernet-mtk_ppe-keep-DSCP-and-ECN-of-offloaded-flows.patch",
+      "sha256": "71fa52f001e91f5b5efa64d1fab3188f095f42ef9bbed3ac11550c9f0425fd42",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/986-net-ethernet-mtk_ppe-add-PPE-cache-preserved-line-lock.patch",
+      "sha256": "299342e94cdf0e75cfc52f3fbbdcd66a3adca607c3ac0ac338d8573bfcfd9fd9",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "target/linux/mediatek/patches-6.18/987-net-ethernet-mtk_wed-unbind-the-WLAN-driver-before-the-Ethernet-driver.patch",
+      "sha256": "e8c2f445b621162214c70d48ae696131e1e82b16bac7fabd85efd304f0e10e55",
+      "status": "ported",
+      "destination": "patches/kernel/100-plcharriere-mt7987-network.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/100-mt7996-fix-register-remap-locking.patch",
+      "sha256": "984da5c08e7f2486bf84313dc83ff277cda9c9cdeb063b0dedd8ac6f06e8e6ba",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/101-mt7996-skip-uninitialized-vif-link-removal.patch",
+      "sha256": "cdfa0a714409fdc70c7a089c09b83eaecc63741ea72e3dc152333aca71c9f657",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/102-mt7996-add-MT7987-WED-3.1-data-path.patch",
+      "sha256": "acf902742b617e2c773b6437dba8f04997e68b542083d6649493c6f384aa1afe",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/103-mt7996-skip-secondary-WED-without-primary.patch",
+      "sha256": "9fc7734c29ff1350adb017827edf7a05929e8ccc7413d61509b77d02941552a2",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/104-mt7996-use-dedicated-MT7990-TX-free-ring-for-WED.patch",
+      "sha256": "3d5c211ab97fb29a322161be9fd1027382185fffd7164f57577c51300a0b220f",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/105-mt7996-route-MT7990-TX-free-notifications-from-MAC.patch",
+      "sha256": "670a485877daa3df64de442277f5f4ad82c2505c50bfb97056a2896915d7b04d",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/106-mt7996-initialize-MT7990-band-1-RRO-ring.patch",
+      "sha256": "7acdc3ee390c44b5552f3bcbe1062426931d3af44b578ce1334abaf4d1217660",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/107-mt7996-take-MT7990-TX-rate-from-firmware-report.patch",
+      "sha256": "ae2706340a99409af7bcdb86c09de7b54b6e00ee16cd7ea0fa13a0c7815bcc67",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/108-mt76-preserve-packed-DMA-ring-control-fields.patch",
+      "sha256": "42b57eb9d22413867363a0c3d9db2b21838000e01e90bbe6fdd6510e2852db0d",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/109-mt7996-separate-WED-and-software-token-ranges.patch",
+      "sha256": "fc68451ad2b649c2ef67c7cd200d31d31b26ff15d6d5a4cf6f2858fcaec1bfae",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/110-mt76-clear-stale-TX-status-before-completion.patch",
+      "sha256": "c1b520cacff2a4b48d86455b72e81cc522cd0b3b8ca3b33980307db0949983ca",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/111-mt76-delete-only-the-RX-NAPIs-that-were-added.patch",
+      "sha256": "704ef063337b1b65d743b0de7a4285082fe773f6e072add690df208aa03837bc",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/112-mt76-free-DMA-descriptor-rings-on-cleanup.patch",
+      "sha256": "80a1804a1f55558170729bf05589e14537f0577b78e8139291aeb279221ba026",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/113-mt76-route-disassoc-frames-to-ALTXQ.patch",
+      "sha256": "56031aec041cc03bbf72b17de24a89043cb8908d2fcd9afbe43ac3842c3da79a",
+      "status": "present",
+      "destination": null
+    },
+    {
+      "source": "package/kernel/mt76/patches/115-mt7996-flush-WED-PPE-entries-on-station-removal.patch",
+      "sha256": "1f2dca3b99930c303f908a6ef508502fde4f8f624d8be9c6802009f6e848ba94",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/117-mt7996-restart-the-radar-detector-after-a-full-reset.patch",
+      "sha256": "f4323cee1aa5fc4de65c06c0a9a967a30035a73ead8489f0decc1bd95c4fc0de",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/118-mt7996-keep-the-TX-PN-across-a-full-reset.patch",
+      "sha256": "080efeddee2e9dcdde4f0079c901d591610b31d09f20ea02bbe49d8571c8c3a1",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/119-mt7996-send-no-beacon-for-a-link-the-firmware-does-not-know.patch",
+      "sha256": "d421bd67dffb0d2f2d4d713996badddd67537d071d0cbba476dce69350b1877d",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/120-mt7996-start-the-MAC-work-of-running-radios-only-after-a-reset.patch",
+      "sha256": "c1fa2cda6185b3655ab83fade7dceffab0daa0e870f99097dd68ea7493850a11",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/121-mt7996-support-per-radio-RTS-threshold-coverage-class-and-antennas.patch",
+      "sha256": "28969a27a9699d6a36fb2f6a83e252334a0548ec79fd9f88d70a20342a2afdb9",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/122-mt7996-apply-the-RTS-threshold-and-coverage-class-when-a-radio-starts.patch",
+      "sha256": "7d280488937376f536e91c8d302e8142863ecace63121cfdbda86d3dcbe947d2",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/123-mt7996-keep-the-default-RTS-threshold-after-a-hardware-restart.patch",
+      "sha256": "863355af8def7866bb6cc3af8252ac6477969080d2e9c751b38b0fee0c6a22bc",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/124-mt76-keep-power-save-buffering-for-nullfunc-probes.patch",
+      "sha256": "1c0454c1e1f5e8524f43466b896a853a15c9b8fd86695d245a004856a0f31df3",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/126-mt7996-use-the-default-timeout-for-STA_REC-and-BSS_INFO-updates.patch",
+      "sha256": "0991f6370688109e686db5bae482e1fd77e8e89fb18fd034b36f308820ce720c",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/127-mt7996-retry-MCU-messages.patch",
+      "sha256": "17ee3a1e35c0f0b6e791447c2dd913ee4ad61759c72b0180f0bdf3144e20ea48",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/128-mt7996-reset-after-an-MCU-timeout-only-once-the-device-is-registered.patch",
+      "sha256": "8fb37faf31406e9e949b9bfeacf3847d2fd406c78f70e1dd46f142484f9575d2",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/129-mt7996-report-radar-on-the-channel-context-of-its-radio.patch",
+      "sha256": "a31baef41a6eeb38eb0f9f4ab80282081bdefa3a2104427678aa359ccfb56941",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/130-mt7996-enable-firmware-RED-with-WED-3.1.patch",
+      "sha256": "047fa7117af92ae05340a1b10c131bd20836dc160287d47cdbc185226e89116f",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/131-mt7996-use-4096-WED-TX-tokens-with-WED-3.1.patch",
+      "sha256": "d478508380913c7cd24454b487825afd3ac17e0fc0708e2c9e3f41ea2d67b5dd",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/132-mt7996-resume-TX-after-a-radar-during-the-start-up-CAC.patch",
+      "sha256": "56a0208f9d7d7bc98009fe04bc99cc40cfa25f0bd726a62c7a8ac3731fd906bf",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/133-mt7996-read-the-byte-counters-of-both-ADM_STAT-event-versions.patch",
+      "sha256": "1d8dc7dcf174dea47cde4f1ee36031f7ee8df7fab5c858978e77aebcbfa3c878",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/134-mt76-drop-802.3-frames-that-fail-the-PN-check.patch",
+      "sha256": "0a56bfe88a0c051759f6dfd5ee661ce368ac361f39e985010974a4d56d2bf75d",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/135-mt76-release-a-pending-A-MSDU-when-a-WED-RX-queue-is-empty.patch",
+      "sha256": "f27380fa6cf719ec20f6c8fae2cbf7690c3674a0d69529234f9c5abe592c3859",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/136-mt7996-advertise-VHT-beamformee-STS-2-on-MT7990.patch",
+      "sha256": "fe308922c624448a2c0e7833ca66d57f5d5341f78c80eaac73e309c88806dec2",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/137-mt7996-take-MT7990-RX-rate-from-firmware-report.patch",
+      "sha256": "ccda659514203a804e02276eb001962c32cedac519be52e858e9449a39322059",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/138-mt7996-upload-the-keys-of-a-reused-link.patch",
+      "sha256": "0409a39e7c066b396b8774594fa935af2134a60089e4447359d6b7ead6a3d752",
+      "status": "present",
+      "destination": null,
+      "note": "The locked mt76 always creates the link and already uploads its keys in mt7996_vif_link_add(); the newer reuse helper does not exist in this version."
+    },
+    {
+      "source": "package/kernel/mt76/patches/139-mt7996-keep-a-wcid-on-its-band.patch",
+      "sha256": "3b0fac82cdc1ef1d98218b18501c44060a443cdbe58c33c711144e6b0b5d94bd",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mt76/patches/900-mt7996-handle-station-airtime-counter-resets.patch",
+      "sha256": "b350cdd2eba979e857d41ed9debdff1f0a753113e1c091bbaefd0285065e522d",
+      "status": "ported",
+      "destination": "patches/openwrt/150-plcharriere-mt76.patch"
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/900-wifi-cfg80211-fix-RTS-threshold-setting-for-single-r.patch",
+      "sha256": "ad82ae54e0795012b3e5c413d37d4b9810dfa7a25733a5ebd2a8b5b500d26fc4",
+      "status": "ported",
+      "destination": "patches/openwrt/160-plcharriere-mac80211.patch"
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/903-mtk-mac80211-relax-the-DFS-restrictions-for-scanning.patch",
+      "sha256": "a2123f1e9659099ae651af74e09ee5ce3eee38440a276eaeb8d78fbdcb99e8c8",
+      "status": "ported",
+      "destination": "patches/openwrt/160-plcharriere-mac80211.patch"
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/904-cfg80211-guard-missing-per-tid-link-stats.patch",
+      "sha256": "f8a44cfd634a82393bbeee51c4208c08cffab00e9e03333a5eb621d9c9654dce",
+      "status": "ported",
+      "destination": "patches/openwrt/160-plcharriere-mac80211.patch"
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/905-mtk-mac80211-fix-radio-idx-missing-after-replace-ctx.patch",
+      "sha256": "d4e1674fd3933d179953ab0fe2dc9dded376bb7dcb5b200e88b4de5ba53c3b39",
+      "status": "ported",
+      "destination": "patches/openwrt/160-plcharriere-mac80211.patch"
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/906-wifi-cfg80211-mac80211-support-per-radio-TX-power.patch",
+      "sha256": "e42bf7b00b3d3ed700ca67621347acd59632bdd04df552c43000885d91c6f5ac",
+      "status": "ported",
+      "destination": "patches/openwrt/160-plcharriere-mac80211.patch"
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/907-wifi-cfg80211-mac80211-support-per-radio-antennas-and-coverage-class.patch",
+      "sha256": "2c7bd0ff89c331d28d7b3d0cd04608e1686288f37196d03bf242cd0b3431a417",
+      "status": "ported",
+      "destination": "patches/openwrt/160-plcharriere-mac80211.patch"
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/909-wifi-mac80211-send-TWT-teardown-to-peer-after-setup.patch",
+      "sha256": "57d9dc63687481ccc08a577e4c92f73db8c0490504c84a84f47addca29c759cb",
+      "status": "present",
+      "destination": null
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/910-wifi-cfg80211-check-IP-header-size-in-cfg80211_class.patch",
+      "sha256": "9e24cc10e1ed3904e942d89316fb7abed4675c663f14bebbc3a2f96e7a7bf648",
+      "status": "present",
+      "destination": null
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/911-wifi-cfg80211-don-t-free-driver-owned-scan-requests.patch",
+      "sha256": "963b618be1eff4e31c68f90000d3890bc0515802a7f3e7e9bae4826e24624622",
+      "status": "present",
+      "destination": null
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/912-wifi-cfg80211-only-group-hidden-BSSes-with-beacon-en.patch",
+      "sha256": "295c643322b61e5cad7317176b8e9956e978993d702feab0cd9a9a310130c942",
+      "status": "present",
+      "destination": null
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/913-wifi-mac80211-reset-state-when-starting-AP-fails.patch",
+      "sha256": "b4dd720743567087ed685ad28c1216597cb64b201067121674c4cbbf2a4fdb98",
+      "status": "present",
+      "destination": null
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/914-wifi-mac80211-reset-the-AP_VLAN-tailroom-counter-on.patch",
+      "sha256": "bfd6f5ca400695b7ca9c29a04f4968b8737520215fa493141cf3da06293f00c4",
+      "status": "present",
+      "destination": null
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/915-wifi-mac80211-set-up-the-TX-info-early-to-fix-failur.patch",
+      "sha256": "c2450b52f5bd92f910c82c43c620892b50ec1ad53edbcb6460674c74545a7bf3",
+      "status": "present",
+      "destination": null
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/916-wifi-mac80211-drop-oversized-fragments-to-avoid-extr.patch",
+      "sha256": "d6c972c1dc2968d145864d8080cd3ca81c73cdd128fe8ba2cb0bee80b12301c0",
+      "status": "ported",
+      "destination": "patches/openwrt/160-plcharriere-mac80211.patch"
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/917-wifi-mac80211-prevent-AP-VLAN-tx-from-other-interfac.patch",
+      "sha256": "55265078ee749b2d546897d2a887eba4838e429d1941c2cde456dcdd5e59f5e5",
+      "status": "ported",
+      "destination": "patches/openwrt/160-plcharriere-mac80211.patch"
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/918-wifi-mac80211-count-only-matching-reservations-in-re.patch",
+      "sha256": "8327182f9386377bf56f79e7a04928ed418fc11fff02e81f47630b90a8de3ff3",
+      "status": "ported",
+      "destination": "patches/openwrt/160-plcharriere-mac80211.patch"
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/919-wifi-mac80211-keep-paired-old-chanctx-alive.patch",
+      "sha256": "31c02c3f187de78c60549e91f346662df66d84dffc2f4f438bc7dc0f3eef7347",
+      "status": "ported",
+      "destination": "patches/openwrt/160-plcharriere-mac80211.patch"
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/926-wifi-mac80211-resend-the-restart-delBA-once-the-stat.patch",
+      "sha256": "0cb93c89e97950d05de3c1cfde03aa404fdcc21219c250466d8a145101f36ab5",
+      "status": "ported",
+      "destination": "patches/openwrt/160-plcharriere-mac80211.patch"
+    },
+    {
+      "source": "package/kernel/mac80211/patches/subsys/927-wifi-cfg80211-keep-a-DFS-channel-available-until-START_AP.patch",
+      "sha256": "415f768027c8b0daa2cef012ac674982d1a09d0b933fadc192ebe0a92b8df3e7",
+      "status": "ported",
+      "destination": "patches/openwrt/160-plcharriere-mac80211.patch"
+    },
+    {
+      "source": "package/network/services/hostapd/patches/900-nl80211-report-probe-client-events-to-the-correct-BSS.patch",
+      "sha256": "14252b479171b18541b200e6e397eb31ed3377d42b53b4a9341c7be22812dffa",
+      "status": "ported",
+      "destination": "patches/openwrt/170-plcharriere-hostapd.patch"
+    },
+    {
+      "source": "package/network/services/hostapd/patches/901-AP-clear-the-authorized-flag-when-removing-the-STA-from-the-driver-during-association.patch",
+      "sha256": "faf993620e1f6724ff9aa83071bd4879c72bf214f5316ef679adb63209b0ce23",
+      "status": "ported",
+      "destination": "patches/openwrt/170-plcharriere-hostapd.patch"
+    },
+    {
+      "source": "package/network/services/hostapd/patches/902-FT-Fix-off-by-2-buffer-bounds-check-in-wpa_ft_proces.patch",
+      "sha256": "fb8b6ba6d41a73a9bca5d287a5def954db7221de7413580b26139aec2c348295",
+      "status": "ported",
+      "destination": "patches/openwrt/170-plcharriere-hostapd.patch"
+    },
+    {
+      "source": "package/network/services/hostapd/patches/903-EHT-Fix-OOB-read-in-hostapd_parse_link_reconf_req_st.patch",
+      "sha256": "b377cfe7f24d82fa8d511cea3563eeb1c8cedd501161cf3194c79eab806d428a",
+      "status": "ported",
+      "destination": "patches/openwrt/170-plcharriere-hostapd.patch"
+    },
+    {
+      "source": "package/network/services/hostapd/patches/904-AP-Fix-OOB-read-of-STA-s-HE-MCS-map-in-check_valid_h.patch",
+      "sha256": "88263bc2d5dd102200fcf30b26de8b60382e90e2de4cf48992ba1a101a347b31",
+      "status": "ported",
+      "destination": "patches/openwrt/170-plcharriere-hostapd.patch"
+    },
+    {
+      "source": "package/network/services/hostapd/patches/905-SAE-Make-sure-the-needed-state-is-available-in-sae_w.patch",
+      "sha256": "f0059ae18a9d839ab66bcd20dd099fdbd77feeaccab5c07ce4140c87f5615a78",
+      "status": "ported",
+      "destination": "patches/openwrt/170-plcharriere-hostapd.patch"
+    },
+    {
+      "source": "package/network/services/hostapd/patches/906-nl80211-Update-AP-MLD-active_links-bitmap-during-sta.patch",
+      "sha256": "918391a901824fdaf42cbf846fca232a96a0c39e791f5d545be19ebe38515eab",
+      "status": "ported",
+      "destination": "patches/openwrt/170-plcharriere-hostapd.patch"
+    },
+    {
+      "source": "package/network/services/hostapd/patches/907-DFS-run-a-CAC-when-the-kernel-refuses-a-channel-whose-CAC-was-skipped.patch",
+      "sha256": "e1edf89ff45564c5655a39a91bd747507e4663ec2e5535ec29771aba69576d9e",
+      "status": "ported",
+      "destination": "patches/openwrt/170-plcharriere-hostapd.patch"
+    },
+    {
+      "source": "package/network/utils/iw/patches/320-mtk-iw-support-per-radio-txpower-setting.patch",
+      "sha256": "4792208c9d9e0f8768990ccc5d2fae8d3ccd965fbd0dd61af0d37c8603c79b2e",
+      "status": "ported",
+      "destination": "patches/openwrt/180-plcharriere-iw.patch"
+    },
+    {
+      "source": "package/network/utils/iw/patches/321-mtk-iw-allow-to-specify-radio_idx-when-setting-TX-RX-antenna.patch",
+      "sha256": "a03c5df1f7badab5dc4d58f21e0a978af6f5072e47774b192946e6e8a6e48ac0",
+      "status": "ported",
+      "destination": "patches/openwrt/180-plcharriere-iw.patch"
+    },
+    {
+      "source": "package/network/utils/iw/patches/322-iw-allow-setting-the-coverage-class-of-a-radio.patch",
+      "sha256": "8c6f59ac6d234c24621d348fcbf6eedd5401fbf0ad785e2f1ccc56d38b9db7c3",
+      "status": "ported",
+      "destination": "patches/openwrt/180-plcharriere-iw.patch"
+    },
+    {
+      "source": "package/network/utils/iwinfo/patches/110-nl80211-resolve-multi-radio-interfaces.patch",
+      "sha256": "c45712c32d26ee1d9d75cd4988caf4dd6265eae43a5bf03d9c85b02fc8170a40",
+      "status": "ported",
+      "destination": "patches/openwrt/190-plcharriere-iwinfo.patch"
+    },
+    {
+      "source": "package/network/utils/iwinfo/patches/120-nl80211-limit-modes-to-multi-radio-band.patch",
+      "sha256": "52d64d5ee621216162949ecf18bf3f94d47f78b9795112d275f7946070dac831",
+      "status": "ported",
+      "destination": "patches/openwrt/190-plcharriere-iwinfo.patch"
+    },
+    {
+      "source": "package/network/utils/iwinfo/patches/130-nl80211-clear-nl80211-freqlist-entry.patch",
+      "sha256": "ca14516c28e69cb032a6b02a76707c9e0ffa51529051e068279ab12b04bcafcf",
+      "status": "ported",
+      "destination": "patches/openwrt/190-plcharriere-iwinfo.patch"
+    }
+  ]
+}
