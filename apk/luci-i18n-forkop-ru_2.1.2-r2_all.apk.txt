@@ -1,0 +1,2 @@
+https://github.com/miuirussia/forkop/releases/download/2.1.2-r2/luci-i18n-forkop-ru_2.1.2-r2_all.apk
+88aff74663ca3a09a52b02e2c6e20b977a6913e2e771a48beb90d9dcb1ef7ee6

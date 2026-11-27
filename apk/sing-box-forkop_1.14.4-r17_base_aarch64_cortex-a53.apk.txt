@@ -1,2 +1,0 @@
-https://github.com/miuirussia/sing-box-forkop/releases/download/v1.14.4-r17/sing-box-forkop_1.14.4-r17_base_aarch64_cortex-a53.apk
-39bdf83c74eaeb37dc0c6eda3c1ee7735b40269e420538e6bbb02552eb2cb297
