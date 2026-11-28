@@ -1,0 +1,2 @@
+https://github.com/miuirussia/forkop/releases/download/2.1.2-r7/luci-app-forkop_2.1.2-r7_all.apk
+6bd91b7cf3ce15a67925fa6c362a53380bb317849296b75af21b89c94a6303f3
